@@ -19,8 +19,11 @@ struct FocusReviewView: View {
     init(session: FocusSession, onDone: @escaping () -> Void) {
         self.session = session
         self.onDone = onDone
+        let id: UUID = session.id
         _dumpItems = Query(
-            filter: #Predicate<FocusDumpItem> { $0.sessionId == session.id },
+            filter: #Predicate<FocusDumpItem> { item in
+                item.sessionId == id
+            },
             sort: [SortDescriptor(\.createdAt, order: .reverse)]
         )
     }

@@ -42,7 +42,7 @@ final class CaptureParser {
             }
         }
         t = t.trimmingCharacters(in: .whitespacesAndNewlines)
-        return t.prefix(80).capitalizedSentence
+        return String(t.prefix(80)).capitalizedSentence
     }
 
     private func suggestStartStep(from title: String) -> String {
