@@ -12,83 +12,77 @@ struct InboxView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \InboxItem.createdAt, order: .reverse) private var items: [InboxItem]
 
+    @State private var showQuickAdd = false
+
     var body: some View {
         NavigationStack {
             List {
                 if items.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Inbox is empty").font(.headline)
+                        Text("Inbox is empty")
+                            .font(.headline)
+
                         Text("Captured thoughts land here when there’s no time yet.")
                             .foregroundStyle(.secondary)
                     }
                     .padding(.vertical, 12)
-                }
-
-                ForEach(items) { item in
-                    InboxRow(item: item)
-                }
-                .onDelete { idx in
-                    for i in idx { context.delete(items[i]) }
-                    try? context.save()
+                    .listRowSeparator(.hidden)
+                } else {
+                    ForEach(items) { item in
+                        NavigationLink {
+                            InboxDetailView(item: item)
+                        } label: {
+                            InboxRow(item: item)
+                        }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                delete(item)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
+                    }
                 }
             }
             .navigationTitle("Inbox")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showQuickAdd = true
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                    .accessibilityLabel("Quick add to inbox")
+                }
+            }
+            .sheet(isPresented: $showQuickAdd) {
+                QuickAddView()
+            }
+        }
+    }
+
+    private func delete(_ item: InboxItem) {
+        context.delete(item)
+        do {
+            try context.save()
+        } catch {
+            print("❌ Save failed (delete from swipe):", error)
         }
     }
 }
 
 private struct InboxRow: View {
-    @Environment(\.modelContext) private var context
     let item: InboxItem
-    @State private var showSchedule = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(item.title).font(.headline)
+        VStack(alignment: .leading, spacing: 6) {
+            Text(item.title)
+                .font(.headline)
+
             Text("Start: \(item.startStep) (\(item.estimateMinutes) min)")
                 .foregroundStyle(.secondary)
-
-            HStack {
-                Button("Schedule") { showSchedule = true }
-                    .buttonStyle(.borderedProminent)
-
-                Button("Make smaller") {
-                    item.startStep = "Open the first app → do one tiny step"
-                    item.estimateMinutes = 2
-                    try? context.save()
-                }
-                .buttonStyle(.bordered)
-
-                Button("Not needed") {
-                    context.delete(item)
-                    try? context.save()
-                }
-                .buttonStyle(.bordered)
-            }
+                .lineLimit(2)
         }
-        .padding(.vertical, 8)
-        .sheet(isPresented: $showSchedule) {
-            ScheduleSheet(title: item.title, startStep: item.startStep, estimate: item.estimateMinutes) { date in
-                let reminder = VerboseReminder(
-                    title: item.title,
-                    startStep: item.startStep,
-                    estimateMinutes: item.estimateMinutes,
-                    scheduledAt: date
-                )
-                context.insert(reminder)
-                context.delete(item)
-                try? context.save()
-
-                Task {
-                    let body = "Start: \(reminder.startStep) (\(reminder.estimateMinutes) min)\nTap “Help me start” if you’re stuck."
-                    try? await NotificationManager.shared.scheduleReminder(
-                        id: reminder.id,
-                        title: reminder.title,
-                        body: body,
-                        scheduledAt: reminder.scheduledAt
-                    )
-                }
-            }
-        }
+        .padding(.vertical, 6)
     }
 }
