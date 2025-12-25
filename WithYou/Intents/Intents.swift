@@ -69,14 +69,21 @@ struct CaptureInWithYouIntent: AppIntent {
 }
 
 struct WithYouShortcuts: AppShortcutsProvider {
+
+    @AppShortcutsBuilder
     static var appShortcuts: [AppShortcut] {
-        [
-            AppShortcut(
-                intent: CaptureInWithYouIntent(),
-                phrases: ["Capture in \(.applicationName)", "Quick capture with \(.applicationName)"],
-                shortTitle: "Capture",
-                systemImageName: "mic.fill"
-            )
-        ]
+        AppShortcut(
+            intent: CaptureInWithYouIntent(),
+            phrases: [
+                "Capture in \(.applicationName)",
+                "Quick capture with \(.applicationName)",
+                "Remember in \(.applicationName)"
+            ],
+            shortTitle: "Capture",
+            systemImageName: "mic.fill"
+        )
     }
+
+    static var shortcutTileColor: ShortcutTileColor = .blue
 }
+

@@ -63,7 +63,7 @@ struct FocusSessionFlowView: View {
                 startSession()
             }
             .frame(maxWidth: .infinity)
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(BorderedProminentButtonStyle())
             .disabled(focusTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
             Spacer()
@@ -71,10 +71,17 @@ struct FocusSessionFlowView: View {
         .padding()
     }
 
+    @ViewBuilder
     private func durationButton(_ label: String, _ seconds: Int) -> some View {
-        Button("\(label) min") { durationSeconds = seconds }
-            .frame(maxWidth: .infinity)
-            .buttonStyle(durationSeconds == seconds ? .borderedProminent : .bordered)
+        if durationSeconds == seconds {
+            Button("\(label) min") { durationSeconds = seconds }
+                .frame(maxWidth: .infinity)
+                .buttonStyle(BorderedProminentButtonStyle())
+        } else {
+            Button("\(label) min") { durationSeconds = seconds }
+                .frame(maxWidth: .infinity)
+                .buttonStyle(BorderedButtonStyle())
+        }
     }
 
     private var dumpView: some View {
@@ -87,7 +94,7 @@ struct FocusSessionFlowView: View {
                 TextField("Add a thought…", text: $dumpText)
                     .textFieldStyle(.roundedBorder)
                 Button("Add") { addDumpItem() }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(BorderedProminentButtonStyle())
                     .disabled(dumpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
 
@@ -101,7 +108,7 @@ struct FocusSessionFlowView: View {
                 step = .running
             }
             .frame(maxWidth: .infinity)
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(BorderedProminentButtonStyle())
 
             Text("You don’t need to remember these during this session.")
                 .font(.footnote)
