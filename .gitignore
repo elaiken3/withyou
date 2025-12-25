@@ -1,0 +1,84 @@
+# ----------------------------
+# Xcode
+# ----------------------------
+
+# Build results
+build/
+DerivedData/
+*.xcworkspace/xcuserdata/
+*.xcworkspace/xcuserdata/**
+
+# User-specific settings
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.xcuserstate
+
+# Xcode 15+ user data
+xcuserdata/
+*.xcuserdatad/
+
+# SwiftUI previews
+*.preview-thumbnails/
+
+# ----------------------------
+# iOS / Simulator
+# ----------------------------
+
+# Simulator files
+*.simruntime
+*.simdevice
+
+# iOS device logs
+*.crash
+*.ips
+
+# ----------------------------
+# Swift Package Manager
+# ----------------------------
+
+.build/
+Package.resolved
+
+# ----------------------------
+# CocoaPods (if added later)
+# ----------------------------
+
+Pods/
+Podfile.lock
+
+# ----------------------------
+# Carthage (if added later)
+# ----------------------------
+
+Carthage/Build/
+
+# ----------------------------
+# Fastlane (if added later)
+# ----------------------------
+
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/
+fastlane/test_output/
+
+# ----------------------------
+# Environment / Secrets
+# ----------------------------
+
+.env
+*.env
+
+# ----------------------------
+# macOS
+# ----------------------------
+
+.DS_Store
+
+# ----------------------------
+# Temporary / Logs
+# ----------------------------
+
+*.log
+tmp/
