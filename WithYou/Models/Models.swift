@@ -1,0 +1,77 @@
+//
+//  Models.swift
+//  WithYou
+//
+//  Created by Eugene Aiken on 12/24/25.
+//
+
+import Foundation
+import SwiftData
+
+enum ItemSource: String, Codable {
+    case siri
+    case app
+    case widget
+}
+
+@Model
+final class InboxItem {
+    var id: UUID
+    var content: String
+    var title: String
+    var createdAt: Date
+    var sourceRaw: String
+
+    var startStep: String
+    var estimateMinutes: Int
+
+    init(content: String,
+         title: String,
+         createdAt: Date = Date(),
+         source: ItemSource,
+         startStep: String,
+         estimateMinutes: Int = 3)
+    {
+        self.id = UUID()
+        self.content = content
+        self.title = title
+        self.createdAt = createdAt
+        self.sourceRaw = source.rawValue
+        self.startStep = startStep
+        self.estimateMinutes = estimateMinutes
+    }
+}
+
+@Model
+final class VerboseReminder {
+    var id: UUID
+    var title: String
+    var why: String
+    var startStep: String
+    var estimateMinutes: Int
+    var scheduledAt: Date
+    var createdAt: Date
+
+    var isStarted: Bool
+    var isDone: Bool
+
+    init(title: String,
+         why: String = "",
+         startStep: String,
+         estimateMinutes: Int = 5,
+         scheduledAt: Date,
+         createdAt: Date = Date(),
+         isStarted: Bool = false,
+         isDone: Bool = false)
+    {
+        self.id = UUID()
+        self.title = title
+        self.why = why
+        self.startStep = startStep
+        self.estimateMinutes = estimateMinutes
+        self.scheduledAt = scheduledAt
+        self.createdAt = createdAt
+        self.isStarted = isStarted
+        self.isDone = isDone
+    }
+}
