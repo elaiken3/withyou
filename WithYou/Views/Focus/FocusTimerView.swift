@@ -22,8 +22,6 @@ struct FocusTimerView: View {
 
     // Resume-safe timing
     @State private var startedAt: Date?
-    @State private var totalPausedSeconds: Int = 0
-    @State private var pausedAt: Date?
 
     // End-of-timer UX
     @State private var showTimeUpSheet: Bool = false
@@ -33,10 +31,21 @@ struct FocusTimerView: View {
             Text(format(secondsRemaining))
                 .font(.system(size: 56, weight: .bold, design: .rounded))
 
-            Text(secondsRemaining == 0 ? "Time’s up. You can wrap up or keep going." : "Only this matters right now.")
-                .foregroundStyle(.secondary)
+            // Copy polish
+            if isPaused {
+                Text("Paused. You can resume when you’re ready.")
+                    .foregroundStyle(.secondary)
+            } else if secondsRemaining == 0 {
+                Text("Overtime. Wrap up when you’re ready.")
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("Only this matters right now.")
+                    .foregroundStyle(.secondary)
+            }
 
-            Text(session.focusTitle).font(.title2).bold()
+            Text(session.focusTitle)
+                .font(.title2)
+                .bold()
 
             if !session.focusStartStep.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Text("Start: \(session.focusStartStep)")
@@ -44,8 +53,10 @@ struct FocusTimerView: View {
             }
 
             HStack {
-                Button(isPaused ? "Resume" : "Pause") { togglePause() }
-                    .buttonStyle(.bordered)
+                Button(isPaused ? "Resume" : "Pause") {
+                    togglePause()
+                }
+                .buttonStyle(.bordered)
 
                 Button("Refocus") { showRefocus = true }
                     .buttonStyle(.bordered)
@@ -61,6 +72,7 @@ struct FocusTimerView: View {
         }
         .padding()
         .onAppear {
+            hydratePauseStateFromSession()
             ensureStartedAt()
             recalcRemaining()
             startTimer()
@@ -76,7 +88,9 @@ struct FocusTimerView: View {
     private var addThoughtSheet: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Park a thought").font(.title2).bold()
+                Text("Park a thought")
+                    .font(.title2)
+                    .bold()
 
                 TextField("Type or dictate…", text: $thoughtText, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
@@ -128,7 +142,7 @@ struct FocusTimerView: View {
                 .buttonStyle(.borderedProminent)
 
                 Button {
-                    // Keep going: just dismiss. Session remains active.
+                    // Keep going: dismiss. Session remains active.
                     showTimeUpSheet = false
                 } label: {
                     HStack {
@@ -175,7 +189,6 @@ struct FocusTimerView: View {
 
             if secondsRemaining <= 0 {
                 secondsRemaining = 0
-                // Show the sheet once; don't auto-end.
                 if !showTimeUpSheet {
                     showTimeUpSheet = true
                 }
@@ -187,9 +200,15 @@ struct FocusTimerView: View {
 
     private func endSession() {
         timer?.invalidate()
+
+        // Clear pause state on end
+        session.pausedAt = nil
+
         session.isActive = false
         session.endedAt = Date()
         try? context.save()
+
+        // This continues to route to Review via FlowView's onFinish handler
         onFinish()
     }
 
@@ -199,7 +218,23 @@ struct FocusTimerView: View {
         recalcRemaining()
     }
 
-    // MARK: - Time math
+    // MARK: - Pause persistence + time math
+
+    private func hydratePauseStateFromSession() {
+        // session.pausedSeconds persists across restarts
+        if let pausedAt = session.pausedAt {
+            // If the app was killed while paused, count time since pausedAt too
+            let extra = Int(Date().timeIntervalSince(pausedAt))
+            if extra > 0 {
+                session.pausedSeconds += extra
+                session.pausedAt = Date() // keep it paused, but reset anchor
+                try? context.save()
+            }
+            isPaused = true
+        } else {
+            isPaused = false
+        }
+    }
 
     private func ensureStartedAt() {
         if session.startedAt == nil {
@@ -211,15 +246,20 @@ struct FocusTimerView: View {
 
     private func togglePause() {
         if isPaused {
-            if let pausedAt {
-                totalPausedSeconds += Int(Date().timeIntervalSince(pausedAt))
+            // Resume: add elapsed paused time (if any) to pausedSeconds and clear pausedAt
+            if let pausedAt = session.pausedAt {
+                let delta = Int(Date().timeIntervalSince(pausedAt))
+                if delta > 0 { session.pausedSeconds += delta }
             }
-            self.pausedAt = nil
+            session.pausedAt = nil
             isPaused = false
         } else {
-            pausedAt = Date()
+            // Pause: set pausedAt now (persisted)
+            session.pausedAt = Date()
             isPaused = true
         }
+
+        try? context.save()
         recalcRemaining()
     }
 
@@ -230,7 +270,16 @@ struct FocusTimerView: View {
         }
 
         let elapsed = Int(Date().timeIntervalSince(startedAt))
-        let effectiveElapsed = max(0, elapsed - totalPausedSeconds)
+
+        // If currently paused, include time since pausedAt too (so remaining stays stable)
+        let livePausedExtra: Int
+        if let pausedAt = session.pausedAt {
+            livePausedExtra = Int(Date().timeIntervalSince(pausedAt))
+        } else {
+            livePausedExtra = 0
+        }
+
+        let effectiveElapsed = max(0, elapsed - (session.pausedSeconds + max(0, livePausedExtra)))
         secondsRemaining = max(0, session.durationSeconds - effectiveElapsed)
     }
 

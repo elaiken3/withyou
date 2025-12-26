@@ -77,6 +77,10 @@ struct FocusSessionFlowView: View {
                 durationButton("25", 25 * 60)
                 durationButton("45", 45 * 60)
                 durationButton("60", 60 * 60)
+                
+                #if DEBUG
+                durationButton("0.2", 12) // 12 seconds for quick testing
+                #endif
             }
 
             Button("Continue") {
