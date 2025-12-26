@@ -10,7 +10,11 @@ import SwiftData
 
 struct TodayView: View {
     @Environment(\.modelContext) private var context
+    @Binding var selectedTab: AppTab
 
+    init(selectedTab: Binding<AppTab> = .constant(.today)) {
+            self._selectedTab = selectedTab
+        }
     // Pull data we know exists in your models
     @Query(sort: \VerboseReminder.scheduledAt, order: .forward) private var reminders: [VerboseReminder]
     @Query(sort: \InboxItem.createdAt, order: .reverse) private var inboxItems: [InboxItem]
@@ -36,8 +40,10 @@ struct TodayView: View {
                             subtitle: "Focusing on: \(active.focusTitle). Want to keep going?"
                         ) {
                             Button("Resume focus") {
-                                toast("Go to the Focus tab to resume.")
+                                selectedTab = .focus
                             }
+                            .buttonStyle(.borderedProminent)
+
                             .buttonStyle(.borderedProminent)
 
                             Button("Refocus (30 sec)") { showRefocus = true }
@@ -202,7 +208,8 @@ struct TodayView: View {
 
         do {
             try context.save()
-            toast("Focus session started. Go to the Focus tab when you’re ready.")
+            selectedTab = .focus
+            toast("Focus session started.")
         } catch {
             print("❌ Save failed (startFocusSession):", error)
             toast("Couldn’t start focus. Try again.")

@@ -10,27 +10,32 @@ import SwiftData
 
 struct RootView: View {
     @Environment(\.modelContext) private var context
+    @State private var selectedTab: AppTab = .today
 
     var body: some View {
-        TabView {
-            TodayView()
+        TabView(selection: $selectedTab) {
+            TodayView(selectedTab: $selectedTab)
                 .tabItem { Label("Today", systemImage: "sun.max") }
-            
+                .tag(AppTab.today)
+
             FocusSessionFlowView()
                 .tabItem { Label("Focus", systemImage: "timer") }
+                .tag(AppTab.focus)
 
             InboxView()
                 .tabItem { Label("Inbox", systemImage: "tray") }
+                .tag(AppTab.inbox)
 
             QuickAddView()
                 .tabItem { Label("Capture", systemImage: "plus.circle.fill") }
+                .tag(AppTab.capture)
 
             ProfilesView()
                 .tabItem { Label("Profiles", systemImage: "person.crop.circle") }
+                .tag(AppTab.profiles)
         }
         .onAppear {
             ProfileStore.ensureDefaultProfile(in: context)
         }
     }
 }
-
