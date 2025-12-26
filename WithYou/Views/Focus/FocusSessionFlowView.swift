@@ -24,12 +24,25 @@ struct FocusSessionFlowView: View {
     var body: some View {
         NavigationStack {
             switch step {
-            case .setup: setupView
-            case .dump: dumpView
+            case .setup:
+                setupView
+            case .dump:
+                dumpView
             case .running:
-                if let s = session { FocusTimerView(session: s) { step = .review } }
+                if let s = session {
+                    FocusTimerView(session: s) { step = .review }
+                } else {
+                    setupView
+                }
             case .review:
-                if let s = session { FocusReviewView(session: s) { step = .setup; session = nil } }
+                if let s = session {
+                    FocusReviewView(session: s) {
+                        step = .setup
+                        session = nil
+                    }
+                } else {
+                    setupView
+                }
             }
         }
         .onAppear {
@@ -37,8 +50,15 @@ struct FocusSessionFlowView: View {
             if let p = ProfileStore.activeProfile(in: context) {
                 durationSeconds = p.defaultFocusMinutes * 60
             }
+
+            // Optional hardening during dev:
+            FocusSessionStore.normalizeActiveSessions(in: context)
+
+            loadActiveSessionIfNeeded()
         }
     }
+
+    // MARK: - Views
 
     private var setupView: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -54,9 +74,9 @@ struct FocusSessionFlowView: View {
 
             Text("Duration").font(.headline)
             HStack {
-                durationButton("25", 25*60)
-                durationButton("45", 45*60)
-                durationButton("60", 60*60)
+                durationButton("25", 25 * 60)
+                durationButton("45", 45 * 60)
+                durationButton("60", 60 * 60)
             }
 
             Button("Continue") {
@@ -73,15 +93,11 @@ struct FocusSessionFlowView: View {
 
     @ViewBuilder
     private func durationButton(_ label: String, _ seconds: Int) -> some View {
-        if durationSeconds == seconds {
-            Button("\(label) min") { durationSeconds = seconds }
-                .frame(maxWidth: .infinity)
-                .buttonStyle(BorderedProminentButtonStyle())
-        } else {
-            Button("\(label) min") { durationSeconds = seconds }
-                .frame(maxWidth: .infinity)
-                .buttonStyle(BorderedButtonStyle())
-        }
+        let isSelected = (durationSeconds == seconds)
+
+        Button("\(label) min") { durationSeconds = seconds }
+            .frame(maxWidth: .infinity)
+            .modifier(ConditionalButtonStyle(isProminent: isSelected))
     }
 
     private var dumpView: some View {
@@ -93,6 +109,7 @@ struct FocusSessionFlowView: View {
             HStack {
                 TextField("Add a thought…", text: $dumpText)
                     .textFieldStyle(.roundedBorder)
+
                 Button("Add") { addDumpItem() }
                     .buttonStyle(BorderedProminentButtonStyle())
                     .disabled(dumpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -103,12 +120,18 @@ struct FocusSessionFlowView: View {
             }
 
             Button("Begin Focus") {
-                session?.startedAt = Date()
-                try? context.save()
+                // Ensure startedAt is set the moment we actually "begin"
+                if let s = session, s.startedAt == nil {
+                    s.startedAt = Date()
+                    s.isActive = true
+                    s.endedAt = nil
+                    try? context.save()
+                }
                 step = .running
             }
             .frame(maxWidth: .infinity)
             .buttonStyle(BorderedProminentButtonStyle())
+            .disabled(session == nil)
 
             Text("You don’t need to remember these during this session.")
                 .font(.footnote)
@@ -119,39 +142,79 @@ struct FocusSessionFlowView: View {
         .padding()
     }
 
+    // MARK: - Actions
+
     private func startSession() {
-        // end existing active session (MVP)
-        if let existing = FocusStore.activeSession(in: context) {
+        // End existing active session (MVP)
+        if let existing = FocusSessionStore.activeSession(in: context) {
             existing.isActive = false
             existing.endedAt = Date()
         }
 
-        let s = FocusSession(focusTitle: focusTitle, focusStartStep: focusStartStep, durationSeconds: durationSeconds, isActive: true)
+        let title = focusTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let s = FocusSession(
+            focusTitle: title,
+            focusStartStep: focusStartStep.trimmingCharacters(in: .whitespacesAndNewlines),
+            durationSeconds: durationSeconds,
+            createdAt: Date(),
+            startedAt: nil,      // we set this on "Begin Focus"
+            endedAt: nil,
+            isActive: true
+        )
+
         context.insert(s)
-        try? context.save()
-        session = s
-        step = .dump
+        do {
+            try context.save()
+            session = s
+            step = .dump
+        } catch {
+            print("❌ Save failed (startSession):", error)
+        }
     }
 
     private func addDumpItem() {
         guard let s = session else { return }
         let trimmed = dumpText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+
         context.insert(FocusDumpItem(text: trimmed, sessionId: s.id))
-        try? context.save()
-        dumpText = ""
+
+        do {
+            try context.save()
+            dumpText = ""
+        } catch {
+            print("❌ Save failed (addDumpItem):", error)
+        }
+    }
+
+    private func loadActiveSessionIfNeeded() {
+        guard session == nil else { return }
+
+        if let existing = FocusSessionStore.activeSession(in: context) {
+            session = existing
+            step = (existing.startedAt == nil) ? .dump : .running
+        }
     }
 }
 
+// MARK: - Dump list
+
 private struct FocusDumpList: View {
     let sessionId: UUID
+
     @Query private var items: [FocusDumpItem]
     @Environment(\.modelContext) private var context
 
     init(sessionId: UUID) {
         self.sessionId = sessionId
-        _items = Query(filter: #Predicate<FocusDumpItem> { $0.sessionId == sessionId },
-                       sort: [SortDescriptor(\.createdAt, order: .reverse)])
+
+        _items = Query(
+            filter: #Predicate<FocusDumpItem> { (item: FocusDumpItem) in
+                item.sessionId == sessionId
+            },
+            sort: [SortDescriptor<FocusDumpItem>(\.createdAt, order: .reverse)]
+        )
     }
 
     var body: some View {
@@ -160,10 +223,23 @@ private struct FocusDumpList: View {
                 Text(item.text)
             }
             .onDelete { idx in
-                for i in idx { context.delete(items[i]) }
+                for i in idx {
+                    context.delete(items[i])
+                }
                 try? context.save()
             }
         }
         .frame(minHeight: 140)
     }
 }
+private struct ConditionalButtonStyle: ViewModifier {
+    let isProminent: Bool
+    func body(content: Content) -> some View {
+        if isProminent {
+            content.buttonStyle(BorderedProminentButtonStyle())
+        } else {
+            content.buttonStyle(BorderedButtonStyle())
+        }
+    }
+}
+

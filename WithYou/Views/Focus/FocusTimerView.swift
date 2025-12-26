@@ -19,6 +19,9 @@ struct FocusTimerView: View {
     @State private var thoughtText = ""
     @State private var showRefocus = false
     @State private var timer: Timer?
+    @State private var startedAt: Date?
+    @State private var totalPausedSeconds: Int = 0
+    @State private var pausedAt: Date?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -36,8 +39,10 @@ struct FocusTimerView: View {
             }
 
             HStack {
-                Button(isPaused ? "Resume" : "Pause") { isPaused.toggle() }
-                    .buttonStyle(.bordered)
+                Button(isPaused ? "Resume" : "Pause") {
+                    togglePause()
+                }
+                .buttonStyle(.bordered)
 
                 Button("Refocus") { showRefocus = true }
                     .buttonStyle(.bordered)
@@ -53,7 +58,8 @@ struct FocusTimerView: View {
         }
         .padding()
         .onAppear {
-            secondsRemaining = session.durationSeconds
+            ensureStartedAt()
+            recalcRemaining()
             startTimer()
         }
         .onDisappear { timer?.invalidate() }
@@ -91,10 +97,12 @@ struct FocusTimerView: View {
     private func startTimer() {
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-            guard !isPaused else { return }
-            if secondsRemaining > 0 {
-                secondsRemaining -= 1
-            } else {
+            // If paused, keep the display steady
+            if isPaused { return }
+
+            recalcRemaining()
+
+            if secondsRemaining <= 0 {
                 endSession()
             }
         }
@@ -113,4 +121,40 @@ struct FocusTimerView: View {
         let s = seconds % 60
         return String(format: "%d:%02d", m, s)
     }
+    
+    private func ensureStartedAt() {
+        if session.startedAt == nil {
+            session.startedAt = Date()
+            try? context.save()
+        }
+        startedAt = session.startedAt
+    }
+
+    private func togglePause() {
+        if isPaused {
+            // resuming
+            if let pausedAt {
+                totalPausedSeconds += Int(Date().timeIntervalSince(pausedAt))
+            }
+            self.pausedAt = nil
+            isPaused = false
+        } else {
+            // pausing
+            pausedAt = Date()
+            isPaused = true
+        }
+        recalcRemaining()
+    }
+
+    private func recalcRemaining() {
+        guard let startedAt else {
+            secondsRemaining = session.durationSeconds
+            return
+        }
+
+        let elapsed = Int(Date().timeIntervalSince(startedAt))
+        let effectiveElapsed = max(0, elapsed - totalPausedSeconds)
+        secondsRemaining = max(0, session.durationSeconds - effectiveElapsed)
+    }
+
 }

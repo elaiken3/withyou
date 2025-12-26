@@ -19,13 +19,15 @@ final class FocusSession {
     var endedAt: Date?
     var isActive: Bool
 
-    init(focusTitle: String,
-         focusStartStep: String = "",
-         durationSeconds: Int,
-         createdAt: Date = Date(),
-         startedAt: Date? = nil,
-         endedAt: Date? = nil,
-         isActive: Bool = true) {
+    init(
+        focusTitle: String,
+        focusStartStep: String = "",
+        durationSeconds: Int,
+        createdAt: Date = Date(),
+        startedAt: Date? = nil,
+        endedAt: Date? = nil,
+        isActive: Bool = true
+    ) {
         self.id = UUID()
         self.createdAt = createdAt
         self.focusTitle = focusTitle
@@ -51,3 +53,5 @@ final class FocusDumpItem {
         self.sessionId = sessionId
     }
 }
+
+
