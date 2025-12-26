@@ -29,7 +29,7 @@ struct CaptureInWithYouIntent: AppIntent {
         let profile = ProfileStore.activeProfile(in: context)
 
         // If focusing, route to Focus Dump (if enabled)
-        if let active = FocusStore.activeSession(in: context),
+        if let active = FocusSessionStore.activeSession(in: context),
            (profile?.routeSiriToFocusDumpWhenActive ?? true) {
             context.insert(FocusDumpItem(text: content, sessionId: active.id))
             try context.save()
