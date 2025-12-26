@@ -19,6 +19,10 @@ final class FocusSession {
     var endedAt: Date?
     var isActive: Bool
 
+    // NEW: persist pause across app restarts
+    var pausedSeconds: Int
+    var pausedAt: Date?
+
     init(
         focusTitle: String,
         focusStartStep: String = "",
@@ -26,7 +30,9 @@ final class FocusSession {
         createdAt: Date = Date(),
         startedAt: Date? = nil,
         endedAt: Date? = nil,
-        isActive: Bool = true
+        isActive: Bool = true,
+        pausedSeconds: Int = 0,
+        pausedAt: Date? = nil
     ) {
         self.id = UUID()
         self.createdAt = createdAt
@@ -36,9 +42,10 @@ final class FocusSession {
         self.startedAt = startedAt
         self.endedAt = endedAt
         self.isActive = isActive
+        self.pausedSeconds = pausedSeconds
+        self.pausedAt = pausedAt
     }
 }
-
 @Model
 final class FocusDumpItem {
     var id: UUID

@@ -36,6 +36,7 @@ struct RootView: View {
         }
         .onAppear {
             ProfileStore.ensureDefaultProfile(in: context)
+            FocusSessionStore.normalizeActiveSessions(in: context)
         }
     }
 }
