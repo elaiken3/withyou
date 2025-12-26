@@ -19,16 +19,21 @@ struct FocusTimerView: View {
     @State private var thoughtText = ""
     @State private var showRefocus = false
     @State private var timer: Timer?
+
+    // Resume-safe timing
     @State private var startedAt: Date?
     @State private var totalPausedSeconds: Int = 0
     @State private var pausedAt: Date?
+
+    // End-of-timer UX
+    @State private var showTimeUpSheet: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(format(secondsRemaining))
                 .font(.system(size: 56, weight: .bold, design: .rounded))
 
-            Text("Only this matters right now.")
+            Text(secondsRemaining == 0 ? "Time’s up. You can wrap up or keep going." : "Only this matters right now.")
                 .foregroundStyle(.secondary)
 
             Text(session.focusTitle).font(.title2).bold()
@@ -39,10 +44,8 @@ struct FocusTimerView: View {
             }
 
             HStack {
-                Button(isPaused ? "Resume" : "Pause") {
-                    togglePause()
-                }
-                .buttonStyle(.bordered)
+                Button(isPaused ? "Resume" : "Pause") { togglePause() }
+                    .buttonStyle(.bordered)
 
                 Button("Refocus") { showRefocus = true }
                     .buttonStyle(.bordered)
@@ -65,12 +68,16 @@ struct FocusTimerView: View {
         .onDisappear { timer?.invalidate() }
         .sheet(isPresented: $showAddThought) { addThoughtSheet }
         .sheet(isPresented: $showRefocus) { RefocusView() }
+        .sheet(isPresented: $showTimeUpSheet) { timeUpSheet }
     }
+
+    // MARK: - Sheets
 
     private var addThoughtSheet: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Park a thought").font(.title2).bold()
+
                 TextField("Type or dictate…", text: $thoughtText, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
 
@@ -90,23 +97,93 @@ struct FocusTimerView: View {
             }
             .padding()
             .navigationTitle("Add thought")
-            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Close") { showAddThought = false } } }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Close") { showAddThought = false }
+                }
+            }
         }
     }
+
+    private var timeUpSheet: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Time’s up.")
+                    .font(.title2)
+                    .bold()
+
+                Text("That counted. Want to wrap up, extend a little, or keep going?")
+                    .foregroundStyle(.secondary)
+
+                Button {
+                    extend(byMinutes: 5)
+                    showTimeUpSheet = false
+                } label: {
+                    HStack {
+                        Image(systemName: "plus.circle")
+                        Text("Extend 5 minutes")
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+
+                Button {
+                    // Keep going: just dismiss. Session remains active.
+                    showTimeUpSheet = false
+                } label: {
+                    HStack {
+                        Image(systemName: "forward")
+                        Text("Keep going")
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+
+                Button(role: .destructive) {
+                    showTimeUpSheet = false
+                    endSession()
+                } label: {
+                    HStack {
+                        Image(systemName: "checkmark.circle")
+                        Text("Wrap up")
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+
+                Spacer()
+            }
+            .padding()
+            .navigationTitle("Session")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Close") { showTimeUpSheet = false }
+                }
+            }
+        }
+        .presentationDetents([.medium])
+    }
+
+    // MARK: - Timer
 
     private func startTimer() {
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-            // If paused, keep the display steady
             if isPaused { return }
 
             recalcRemaining()
 
             if secondsRemaining <= 0 {
-                endSession()
+                secondsRemaining = 0
+                // Show the sheet once; don't auto-end.
+                if !showTimeUpSheet {
+                    showTimeUpSheet = true
+                }
             }
         }
     }
+
+    // MARK: - Session actions
 
     private func endSession() {
         timer?.invalidate()
@@ -116,12 +193,14 @@ struct FocusTimerView: View {
         onFinish()
     }
 
-    private func format(_ seconds: Int) -> String {
-        let m = seconds / 60
-        let s = seconds % 60
-        return String(format: "%d:%02d", m, s)
+    private func extend(byMinutes minutes: Int) {
+        session.durationSeconds += minutes * 60
+        try? context.save()
+        recalcRemaining()
     }
-    
+
+    // MARK: - Time math
+
     private func ensureStartedAt() {
         if session.startedAt == nil {
             session.startedAt = Date()
@@ -132,14 +211,12 @@ struct FocusTimerView: View {
 
     private func togglePause() {
         if isPaused {
-            // resuming
             if let pausedAt {
                 totalPausedSeconds += Int(Date().timeIntervalSince(pausedAt))
             }
             self.pausedAt = nil
             isPaused = false
         } else {
-            // pausing
             pausedAt = Date()
             isPaused = true
         }
@@ -157,4 +234,9 @@ struct FocusTimerView: View {
         secondsRemaining = max(0, session.durationSeconds - effectiveElapsed)
     }
 
+    private func format(_ seconds: Int) -> String {
+        let m = seconds / 60
+        let s = seconds % 60
+        return String(format: "%d:%02d", m, s)
+    }
 }
