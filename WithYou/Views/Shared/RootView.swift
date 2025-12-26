@@ -15,6 +15,9 @@ struct RootView: View {
         TabView {
             TodayView()
                 .tabItem { Label("Today", systemImage: "sun.max") }
+            
+            FocusSessionFlowView()
+                .tabItem { Label("Focus", systemImage: "timer") }
 
             InboxView()
                 .tabItem { Label("Inbox", systemImage: "tray") }

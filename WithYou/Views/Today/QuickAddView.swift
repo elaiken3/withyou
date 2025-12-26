@@ -85,7 +85,7 @@ struct QuickAddView: View {
         let profile = ProfileStore.activeProfile(in: context)
 
         // If focusing, route to Focus Dump
-        if let active = FocusStore.activeSession(in: context),
+        if let active = FocusSessionStore.activeSession(in: context),
            (profile?.routeSiriToFocusDumpWhenActive ?? true) {
 
             context.insert(FocusDumpItem(text: text, sessionId: active.id))
