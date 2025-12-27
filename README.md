@@ -10,15 +10,15 @@ A person with ADHD or a guardian with an ADHD child
 ### Description
 -----------
 
-WithYou is an executive-function support system that helps people with ADHD complete tasks by capturing thoughts, protecting focus, and prioritizing completing over starting tasks.
+WithYou is an **executive-function support system** that helps people with ADHD **complete tasks** by **capturing thoughts, protecting focus, and prioritizing completing over starting tasks.**
 
-It reduces mental overload so people can focus on one thing at a time --- with pride, focus, and confidence.
+It reduces mental overload so people can focus on **one thing at a time** --- with pride, focus, and confidence.
 
 This is not a traditional to-do app.
 
 The goal is getting things done.
 
-For many people with ADHD, that starts with clearing the mind and protecting attention long enough to make rewardable progress. .
+For many people with ADHD, that starts with clearing the mind and protecting attention long enough to make **rewardable progress**.
 
 * * * * *
 
@@ -268,13 +268,13 @@ What's implemented today:
 
 -   Focus Sessions with:
 
--   Brain dump
+  -   Brain dump
 
--   Pause / resume
+  -   Pause / resume
 
--   Extend time
+  -   Extend time
 
--   Wrap-up review
+  -   Wrap-up review
 
 -   Gentle focus-end notifications
 
