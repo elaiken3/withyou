@@ -201,21 +201,32 @@ struct FocusTimerView: View {
     private func endSession() {
         timer?.invalidate()
 
-        // Clear pause state on end
-        session.pausedAt = nil
+        // (3) Cancel focus-end notification when ending early / wrapping up
+        NotificationManager.shared.cancelFocusEnd(sessionId: session.id)
 
         session.isActive = false
         session.endedAt = Date()
         try? context.save()
-
-        // This continues to route to Review via FlowView's onFinish handler
         onFinish()
     }
+
 
     private func extend(byMinutes minutes: Int) {
         session.durationSeconds += minutes * 60
         try? context.save()
         recalcRemaining()
+
+        // (2) Reschedule focus-end notification after extending
+        Task {
+            guard let started = session.startedAt else { return }
+            let endDate = started.addingTimeInterval(TimeInterval(session.durationSeconds))
+            NotificationManager.shared.cancelFocusEnd(sessionId: session.id)
+            try? await NotificationManager.shared.scheduleFocusEnd(
+                sessionId: session.id,
+                focusTitle: session.focusTitle,
+                endDate: endDate
+            )
+        }
     }
 
     // MARK: - Pause persistence + time math
@@ -240,27 +251,56 @@ struct FocusTimerView: View {
         if session.startedAt == nil {
             session.startedAt = Date()
             try? context.save()
+
+            // (1) Schedule focus-end notification when the session starts
+            Task {
+                let endDate = (session.startedAt ?? Date())
+                    .addingTimeInterval(TimeInterval(session.durationSeconds))
+                try? await NotificationManager.shared.scheduleFocusEnd(
+                    sessionId: session.id,
+                    focusTitle: session.focusTitle,
+                    endDate: endDate
+                )
+            }
         }
         startedAt = session.startedAt
     }
 
     private func togglePause() {
         if isPaused {
-            // Resume: add elapsed paused time (if any) to pausedSeconds and clear pausedAt
+            // ✅ RESUME: add elapsed paused time (if any) to pausedSeconds and clear pausedAt
             if let pausedAt = session.pausedAt {
                 let delta = Int(Date().timeIntervalSince(pausedAt))
                 if delta > 0 { session.pausedSeconds += delta }
             }
             session.pausedAt = nil
             isPaused = false
+
+            try? context.save()
+            recalcRemaining()
+
+            // 🔔 Reschedule focus-end notification using remaining time
+            Task {
+                let endDate = Date().addingTimeInterval(TimeInterval(secondsRemaining))
+                NotificationManager.shared.cancelFocusEnd(sessionId: session.id)
+                try? await NotificationManager.shared.scheduleFocusEnd(
+                    sessionId: session.id,
+                    focusTitle: session.focusTitle,
+                    endDate: endDate
+                )
+            }
+
         } else {
-            // Pause: set pausedAt now (persisted)
+            // ✅ PAUSE: set pausedAt now (persisted)
             session.pausedAt = Date()
             isPaused = true
-        }
 
-        try? context.save()
-        recalcRemaining()
+            try? context.save()
+            recalcRemaining()
+
+            // 🔕 Cancel focus-end notification while paused
+            NotificationManager.shared.cancelFocusEnd(sessionId: session.id)
+        }
     }
 
     private func recalcRemaining() {

@@ -18,6 +18,7 @@ struct WithYouApp: App {
                 VerboseReminder.self,
                 FocusSession.self,
                 FocusDumpItem.self,
+                FocusBlock.self,
                 UserProfile.self,
                 AppState.self
         )
