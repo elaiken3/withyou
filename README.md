@@ -252,8 +252,8 @@ Explicitly avoided:
 
 Completion feedback is gentle:
 
-"Nice."\
-"That counted."
+- "Nice."\
+- "That counted."
 
 * * * * *
 
