@@ -2,7 +2,7 @@
 
 **An achievement app for ADHD brains.**
 
-### Audiance
+### Audience
 --------
 
 A person with ADHD or a guardian with an ADHD child
