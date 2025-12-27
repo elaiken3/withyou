@@ -85,12 +85,14 @@ No red text. No overdue panic.
 Focus Sessions protect attention for short periods.
 
 Flow:
-1. Choose one focus task
-2. Brain dump distracting thoughts
-3. Start 25–60 minute timer
-4. Add thoughts without stopping
-5. End session
-6. Decide what to do with parked thoughts
+- Choose one focus task
+- Brain dump distracting thoughts
+- Start a short timer (25–60 min)
+- Pause / resume as needed
+- Add thoughts without stopping
+- Extend time if helpful
+- End session
+- Decide what to do with parked thoughts
 
 During a Focus Session:
 > Nothing else matters.
@@ -148,7 +150,33 @@ Completion feedback is gentle:
 > “That counted.”
 
 ---
+## 🚧 Current Status (TestFlight Build)
 
+WithYou is currently in **early TestFlight testing**.
+
+What’s implemented today:
+- Capture → Inbox → Reminder flow
+- Focus Sessions with:
+  - Brain dump
+  - Pause / resume
+  - Extend time
+  - Wrap-up review
+- Gentle focus-end notifications
+- Refocus (30-second reset)
+- Profiles for personalization
+- Tab-based navigation (Today / Focus / Inbox / Capture / Profiles)
+
+What’s intentionally *not* finished yet:
+- Daily planning UI
+- Session history
+- Analytics or insights
+- Advanced Siri / Shortcuts
+- Energy-aware features
+
+If something feels incomplete, that’s expected — this phase is about:
+**Does this feel emotionally safe? Does it reduce friction?**
+
+---
 ## 🧭 Roadmap Overview
 
 ### v1 — External Brain
@@ -187,3 +215,22 @@ No ads. No dark patterns.
 
 **WithYou is an executive-function support app that holds thoughts, protects focus,
 and removes shame — so users can do one thing at a time without feeling broken.**
+
+---
+
+## 🧪 How to Give Feedback
+
+If you’re testing WithYou via TestFlight:
+
+- Use the app normally — there’s no “right” way
+- If something feels stressful, confusing, or surprisingly calming, that’s valuable feedback
+- Use TestFlight’s “Send Feedback” feature for bugs or thoughts
+
+Helpful feedback questions:
+- Where did you feel relief?
+- Where did friction remain?
+- Did anything feel unintentionally pressuring?
+- Did the language feel safe?
+
+You’re not testing productivity.
+You’re testing emotional load.
