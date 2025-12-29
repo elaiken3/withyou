@@ -18,6 +18,14 @@ struct FocusSessionFlowView: View {
 
     @State private var session: FocusSession?
     @State private var dumpText: String = ""
+    
+    @State private var showCustomDurationSheet = false
+    @State private var customMinutes: Int = 25
+    @State private var saveAsPreset: Bool = true
+    @State private var presetLabel: String = ""
+    
+    @State private var activeProfile: UserProfile?
+    @State private var presets: [FocusDurationPreset] = []
 
     enum Step { case setup, dump, running, review }
 
@@ -46,14 +54,19 @@ struct FocusSessionFlowView: View {
             }
         }
         .onAppear {
+            // Ensure profile exists
             ProfileStore.ensureDefaultProfile(in: context)
-            if let p = ProfileStore.activeProfile(in: context) {
+
+            // Load active profile
+            activeProfile = ProfileStore.activeProfile(in: context)
+
+            // Set default duration + load presets
+            if let p = activeProfile {
                 durationSeconds = p.defaultFocusMinutes * 60
+                presets = FocusPresetStore.presets(for: p.id, in: context)
             }
 
-            // Optional hardening during dev:
-            FocusSessionStore.normalizeActiveSessions(in: context)
-
+            // Resume active focus session if one exists
             loadActiveSessionIfNeeded()
         }
     }
@@ -73,15 +86,38 @@ struct FocusSessionFlowView: View {
                 .textFieldStyle(.roundedBorder)
 
             Text("Duration").font(.headline)
-            HStack {
-                durationButton("25", 25 * 60)
-                durationButton("45", 45 * 60)
-                durationButton("60", 60 * 60)
-                
-                #if DEBUG
-                durationButton("0.2", 12) // 12 seconds for quick testing
-                #endif
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Duration").font(.headline)
+
+                // Presets row
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        // Default built-ins (keep your classics)
+                        durationButton("25", 25 * 60)
+                        durationButton("45", 45 * 60)
+                        durationButton("60", 60 * 60)
+
+                        // User presets (per profile)
+                        ForEach(presets) { p in
+                            durationButton(p.label, p.minutes * 60)
+                        }
+
+                        Button {
+                            customMinutes = max(1, durationSeconds / 60)
+                            presetLabel = ""
+                            saveAsPreset = true
+                            showCustomDurationSheet = true
+                        } label: {
+                            Label("Custom", systemImage: "slider.horizontal.3")
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
             }
+            .sheet(isPresented: $showCustomDurationSheet) {
+                customDurationSheet
+            }
+
 
             Button("Continue") {
                 startSession()
@@ -93,6 +129,61 @@ struct FocusSessionFlowView: View {
             Spacer()
         }
         .padding()
+    }
+    
+    private var customDurationSheet: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Stepper(value: $customMinutes, in: 1...240, step: 1) {
+                        Text("Minutes: \(customMinutes)")
+                    }
+                    Text("This will set your focus session to \(customMinutes) minutes.")
+                        .foregroundStyle(.secondary)
+                }
+
+                Section {
+                    Toggle("Save as preset", isOn: $saveAsPreset)
+
+                    if saveAsPreset {
+                        TextField("Preset name (optional)", text: $presetLabel)
+                        Text("Examples: “Deep work”, “Quick win”, “Reading”.")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .navigationTitle("Custom Duration")
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { showCustomDurationSheet = false }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Set") {
+                        durationSeconds = customMinutes * 60
+
+                        if saveAsPreset, let profile = activeProfile {
+                            let label = presetLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+                            let finalLabel = label.isEmpty ? "\(customMinutes) min" : label
+
+                            // Avoid duplicate minutes/label combos (simple guard)
+                            let exists = presets.contains { $0.minutes == customMinutes && $0.label == finalLabel }
+                            if !exists {
+                                FocusPresetStore.addPreset(
+                                    minutes: customMinutes,
+                                    label: finalLabel,
+                                    profileId: profile.id,
+                                    in: context
+                                )
+                                presets = FocusPresetStore.presets(for: profile.id, in: context)
+                            }
+                        }
+
+                        showCustomDurationSheet = false
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+        }
     }
 
     @ViewBuilder
