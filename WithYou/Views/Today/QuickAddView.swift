@@ -13,6 +13,9 @@ struct QuickAddView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var text: String = ""
+    @State private var startStepText: String = ""
+    @State private var showFirstStep: Bool = false
+
     @State private var isSaving = false
     @State private var lastErrorMessage: String?
 
@@ -26,6 +29,26 @@ struct QuickAddView: View {
                     .textFieldStyle(.roundedBorder)
                     .padding(.horizontal)
                     .padding(.top)
+
+                // Optional First Step (collapsed by default)
+                Button {
+                    withAnimation(.easeInOut) { showFirstStep.toggle() }
+                } label: {
+                    HStack(spacing: 8) {
+                        Text(showFirstStep ? "Hide first step" : "Add a first step (optional)")
+                        Spacer()
+                        Image(systemName: showFirstStep ? "chevron.up" : "chevron.down")
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal)
+                }
+                .buttonStyle(.plain)
+
+                if showFirstStep {
+                    TextField("First step (e.g., Open the doc)", text: $startStepText, axis: .vertical)
+                        .textFieldStyle(.roundedBorder)
+                        .padding(.horizontal)
+                }
 
                 if let msg = lastErrorMessage {
                     Text(msg)
@@ -76,6 +99,19 @@ struct QuickAddView: View {
         case inboxOnly   // never schedule
     }
 
+    private func resolvedStartStep(parsedStartStep: String) -> String {
+        let explicit = startStepText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !explicit.isEmpty { return explicit }
+        return parsedStartStep
+    }
+
+    private func resetStateAndDismiss() {
+        text = ""
+        startStepText = ""
+        showFirstStep = false
+        dismiss()
+    }
+
     private func save(mode: SaveMode) {
         guard !isSaving else { return }
         isSaving = true
@@ -88,11 +124,25 @@ struct QuickAddView: View {
         if let active = FocusSessionStore.activeSession(in: context),
            (profile?.routeSiriToFocusDumpWhenActive ?? true) {
 
-            context.insert(FocusDumpItem(text: text, sessionId: active.id))
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let step = startStepText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            let payload: String
+            if step.isEmpty {
+                payload = trimmed
+            } else {
+                // Keep it simple: store both in one dump item
+                payload =
+                """
+                \(trimmed)
+                Start: \(step)
+                """
+            }
+
+            context.insert(FocusDumpItem(text: payload, sessionId: active.id))
             do {
                 try context.save()
-                text = ""
-                dismiss() // closes if presented as sheet
+                resetStateAndDismiss()
             } catch {
                 lastErrorMessage = "Couldn’t save. Try again."
                 print("❌ Save failed (FocusDump):", error)
@@ -106,21 +156,22 @@ struct QuickAddView: View {
         // let parsed = parser.parse(text, profile: profile, now: .now)
         let parsed = parser.parse(text, profile: profile)
 
+        let startStepToUse = resolvedStartStep(parsedStartStep: parsed.startStep)
+
         // Inbox-only mode: always create InboxItem
         if mode == .inboxOnly {
             let inbox = InboxItem(
                 content: text,
                 title: parsed.title,
                 source: .app,
-                startStep: parsed.startStep,
+                startStep: startStepToUse,
                 estimateMinutes: parsed.estimateMinutes
             )
             context.insert(inbox)
 
             do {
                 try context.save()
-                text = ""
-                dismiss()
+                resetStateAndDismiss()
             } catch {
                 lastErrorMessage = "Couldn’t save to Inbox. Try again."
                 print("❌ Save failed (InboxOnly):", error)
@@ -134,7 +185,7 @@ struct QuickAddView: View {
         if let when = parsed.scheduledAt {
             let reminder = VerboseReminder(
                 title: parsed.title,
-                startStep: parsed.startStep,
+                startStep: startStepToUse,
                 estimateMinutes: parsed.estimateMinutes,
                 scheduledAt: when
             )
@@ -169,22 +220,20 @@ struct QuickAddView: View {
                 }
             }
 
-            text = ""
-            dismiss()
+            resetStateAndDismiss()
         } else {
             let inbox = InboxItem(
                 content: text,
                 title: parsed.title,
                 source: .app,
-                startStep: parsed.startStep,
+                startStep: startStepToUse,
                 estimateMinutes: parsed.estimateMinutes
             )
             context.insert(inbox)
 
             do {
                 try context.save()
-                text = ""
-                dismiss()
+                resetStateAndDismiss()
             } catch {
                 lastErrorMessage = "Couldn’t save to Inbox. Try again."
                 print("❌ Save failed (Inbox):", error)
