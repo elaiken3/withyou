@@ -19,6 +19,7 @@ struct WithYouApp: App {
                 FocusSession.self,
                 FocusDumpItem.self,
                 FocusBlock.self,
+                FocusDurationPreset.self,
                 UserProfile.self,
                 AppState.self
         )
