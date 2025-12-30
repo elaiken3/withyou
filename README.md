@@ -377,3 +377,7 @@ Helpful feedback questions:
 -   Did the language feel safe?
 
 You're not testing productivity. You're testing emotional load.
+
+## Legal
+- Privacy Policy: https://elaiken3.github.io/withyou/privacy
+- Support: https://elaiken3.github.io/withyou/support
