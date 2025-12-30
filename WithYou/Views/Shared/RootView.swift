@@ -15,24 +15,24 @@ struct RootView: View {
     var body: some View {
         TabView(selection: $selectedTab) {
             TodayView(selectedTab: $selectedTab)
-                .tabItem { Label("Today", systemImage: "sun.max") }
                 .tag(AppTab.today)
+                .tabItem { Label("Today", systemImage: "sun.max") }
 
             FocusSessionFlowView()
-                .tabItem { Label("Focus", systemImage: "timer") }
                 .tag(AppTab.focus)
+                .tabItem { Label("Focus", systemImage: "timer") }
 
             InboxView()
-                .tabItem { Label("Inbox", systemImage: "tray") }
                 .tag(AppTab.inbox)
+                .tabItem { Label("Inbox", systemImage: "tray") }
+
+            ScheduleView()
+                .tag(AppTab.schedule)
+                .tabItem { Label("Schedule", systemImage: "calendar") }
 
             QuickAddView()
-                .tabItem { Label("Capture", systemImage: "plus.circle.fill") }
                 .tag(AppTab.capture)
-
-            ProfilesView()
-                .tabItem { Label("Profiles", systemImage: "person.crop.circle") }
-                .tag(AppTab.profiles)
+                .tabItem { Label("Capture", systemImage: "plus.circle.fill") }
         }
         .onAppear {
             ProfileStore.ensureDefaultProfile(in: context)

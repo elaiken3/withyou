@@ -13,8 +13,9 @@ struct TodayView: View {
     @Binding var selectedTab: AppTab
 
     init(selectedTab: Binding<AppTab> = .constant(.today)) {
-            self._selectedTab = selectedTab
-        }
+        self._selectedTab = selectedTab
+    }
+
     // Pull data we know exists in your models
     @Query(sort: \VerboseReminder.scheduledAt, order: .forward) private var reminders: [VerboseReminder]
     @Query(sort: \InboxItem.createdAt, order: .reverse) private var inboxItems: [InboxItem]
@@ -23,11 +24,31 @@ struct TodayView: View {
     @State private var showRefocus = false
     @State private var showScheduleForInboxItem: InboxItem?
     @State private var toastMessage: String?
+    @State private var showProfiles = false
+    @State private var showRescheduleForReminder: VerboseReminder?
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+
+                    // STILL RELEVANT (missed reminder, neutral)
+                    if let missed = missedReminder {
+                        TodayCard(
+                            title: "Still relevant?",
+                            subtitle: "You didn’t do this at the scheduled time — no problem."
+                        ) {
+                            Button("Today") { rescheduleMissedToToday(missed) }
+                                .buttonStyle(.borderedProminent)
+
+                            Button("Later") { showRescheduleForReminder = missed }
+                                .buttonStyle(.bordered)
+
+                            Button("Not needed") { dismissMissedReminder(missed) }
+                                .buttonStyle(.bordered)
+                        }
+                        .padding(.horizontal)
+                    }
 
                     // RIGHT NOW (one card)
                     Text("Right now")
@@ -42,8 +63,6 @@ struct TodayView: View {
                             Button("Resume focus") {
                                 selectedTab = .focus
                             }
-                            .buttonStyle(.borderedProminent)
-
                             .buttonStyle(.borderedProminent)
 
                             Button("Refocus (30 sec)") { showRefocus = true }
@@ -150,6 +169,15 @@ struct TodayView: View {
                     convertInboxItemToReminder(item, date: date)
                 }
             }
+            .sheet(item: $showRescheduleForReminder) { reminder in
+                ScheduleSheet(
+                    title: reminder.title,
+                    startStep: reminder.startStep,
+                    estimate: reminder.estimateMinutes
+                ) { date in
+                    rescheduleReminder(reminder, to: date)
+                }
+            }
             .overlay(alignment: .bottom) {
                 if let toastMessage {
                     ToastView(text: toastMessage)
@@ -160,6 +188,18 @@ struct TodayView: View {
             }
             .onAppear {
                 ProfileStore.ensureDefaultProfile(in: context)
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showProfiles = true
+                    } label: {
+                        Image(systemName: "gearshape")
+                    }
+                }
+            }
+            .sheet(isPresented: $showProfiles) {
+                NavigationStack { ProfilesView() }
             }
         }
     }
@@ -173,8 +213,13 @@ struct TodayView: View {
     private var nextReminderToday: VerboseReminder? {
         let today = Calendar.current.startOfDay(for: .now)
         let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: today)!
-
         return reminders.first(where: { $0.scheduledAt >= today && $0.scheduledAt < tomorrow })
+    }
+
+    /// One missed reminder (no backlog, no overdue)
+    private var missedReminder: VerboseReminder? {
+        let now = Date()
+        return reminders.first(where: { $0.scheduledAt < now })
     }
 
     private var nextTinyInboxItem: InboxItem? {
@@ -278,6 +323,99 @@ struct TodayView: View {
         }
 
         toast("Scheduled. You don’t have to hold it in your head.")
+    }
+
+    private func rescheduleReminder(_ reminder: VerboseReminder, to date: Date) {
+        reminder.scheduledAt = date
+
+        do {
+            try context.save()
+        } catch {
+            print("❌ Save failed (rescheduleReminder):", error)
+            toast("Couldn’t reschedule. Try again.")
+            return
+        }
+
+        Task {
+            let body =
+            """
+            Start: \(reminder.startStep) (\(reminder.estimateMinutes) min)
+            Tap “Help me start” if you’re stuck.
+            """
+
+            do {
+                try await NotificationManager.shared.scheduleReminder(
+                    id: reminder.id,
+                    title: reminder.title,
+                    body: body,
+                    scheduledAt: reminder.scheduledAt
+                )
+            } catch {
+                print("❌ Notification schedule failed:", error)
+            }
+        }
+
+        toast("Rescheduled.")
+    }
+
+    private func rescheduleMissedToToday(_ reminder: VerboseReminder) {
+        ProfileStore.ensureDefaultProfile(in: context)
+        let profile = ProfileStore.activeProfile(in: context)
+
+        let now = Date()
+        let cal = Calendar.current
+        var target = now.addingTimeInterval(30 * 60) // fallback: 30 min from now
+
+        // If today's evening default is still ahead, use that.
+        if let p = profile {
+            let startOfToday = cal.startOfDay(for: now)
+            if let evening = cal.date(bySettingHour: p.eveningHour, minute: 0, second: 0, of: startOfToday),
+               evening > now {
+                target = evening
+            }
+        }
+
+        reminder.scheduledAt = target
+
+        do {
+            try context.save()
+        } catch {
+            print("❌ Save failed (rescheduleMissedToToday):", error)
+            toast("Couldn’t reschedule. Try again.")
+            return
+        }
+
+        Task {
+            let body =
+            """
+            Start: \(reminder.startStep) (\(reminder.estimateMinutes) min)
+            Tap “Help me start” if you’re stuck.
+            """
+
+            do {
+                try await NotificationManager.shared.scheduleReminder(
+                    id: reminder.id,
+                    title: reminder.title,
+                    body: body,
+                    scheduledAt: reminder.scheduledAt
+                )
+            } catch {
+                print("❌ Notification schedule failed:", error)
+            }
+        }
+
+        toast("Rescheduled for today.")
+    }
+
+    private func dismissMissedReminder(_ reminder: VerboseReminder) {
+        context.delete(reminder)
+        do {
+            try context.save()
+            toast("Let go.")
+        } catch {
+            print("❌ Save failed (dismissMissedReminder):", error)
+            toast("Couldn’t remove it. Try again.")
+        }
     }
 
     private func toast(_ message: String) {
