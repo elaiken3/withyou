@@ -1,16 +1,17 @@
 # Support — WithYou
 
-If you need help or want to report a bug, here are the best ways to reach us.
+Thanks for testing WithYou.
 
-## Contact
-- Email: eugeneaiken03@gmail.com
-- GitHub Issues: Use the Issues tab in this repository
+## Get help / report a bug
+Please use GitHub Issues in this repository:
+https://github.com/elaiken3/withyou/issues
 
-## What to include in bug reports
+## What to include in a report
 - Device model + iOS version
 - What you expected to happen
 - What actually happened
-- Screenshots or screen recording (if possible)
+- Steps to reproduce (if possible)
+- Screenshots or screen recording (if available)
 
 ## TestFlight Feedback
-If you're testing through TestFlight, you can also use “Send Feedback” from the TestFlight app.
+If you’re testing through TestFlight, you can also use “Send Feedback” from the TestFlight app.
