@@ -8,5 +8,5 @@
 import Foundation
 
 enum AppTab: Hashable {
-    case today, focus, inbox, capture, profiles
+    case today, focus, schedule, inbox, capture
 }
