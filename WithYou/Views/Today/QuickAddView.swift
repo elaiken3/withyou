@@ -7,10 +7,14 @@
 
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct QuickAddView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
+
+    @FocusState private var isTextFocused: Bool
+    @FocusState private var isFirstStepFocused: Bool
 
     @State private var text: String = ""
     @State private var startStepText: String = ""
@@ -29,10 +33,22 @@ struct QuickAddView: View {
                     .textFieldStyle(.roundedBorder)
                     .padding(.horizontal)
                     .padding(.top)
+                    .focused($isTextFocused)
 
                 // Optional First Step (collapsed by default)
                 Button {
                     withAnimation(.easeInOut) { showFirstStep.toggle() }
+                    if showFirstStep {
+                        // Move focus to the first-step field when it opens
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                            isFirstStepFocused = true
+                        }
+                    } else {
+                        // Return focus to main field when it closes
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                            isTextFocused = true
+                        }
+                    }
                 } label: {
                     HStack(spacing: 8) {
                         Text(showFirstStep ? "Hide first step" : "Add a first step (optional)")
@@ -48,6 +64,7 @@ struct QuickAddView: View {
                     TextField("First step (e.g., Open the doc)", text: $startStepText, axis: .vertical)
                         .textFieldStyle(.roundedBorder)
                         .padding(.horizontal)
+                        .focused($isFirstStepFocused)
                 }
 
                 if let msg = lastErrorMessage {
@@ -80,11 +97,39 @@ struct QuickAddView: View {
 
                 Spacer()
             }
+            // Tap anywhere outside fields to dismiss keyboard
+            .contentShape(Rectangle())
+            .onTapGesture {
+                isTextFocused = false
+                isFirstStepFocused = false
+            }
             .navigationTitle("Capture")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                // Escape hatch (no-save exit)
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") {
+                        clearAndDismiss()
+                    }
+                }
+
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Close") { dismiss() }
+                }
+
+                // Keyboard toolbar
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") {
+                        isTextFocused = false
+                        isFirstStepFocused = false
+                    }
+                }
+            }
+            .onAppear {
+                // Focus the main field on open
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    isTextFocused = true
                 }
             }
         }
@@ -105,10 +150,28 @@ struct QuickAddView: View {
         return parsedStartStep
     }
 
+    private func clearAndDismiss() {
+        // Clear input so Cancel feels emotionally safe (nothing saved)
+        text = ""
+        startStepText = ""
+        showFirstStep = false
+        lastErrorMessage = nil
+
+        isTextFocused = false
+        isFirstStepFocused = false
+
+        dismiss()
+    }
+
     private func resetStateAndDismiss() {
         text = ""
         startStepText = ""
         showFirstStep = false
+        lastErrorMessage = nil
+
+        isTextFocused = false
+        isFirstStepFocused = false
+
         dismiss()
     }
 
@@ -120,22 +183,21 @@ struct QuickAddView: View {
         ProfileStore.ensureDefaultProfile(in: context)
         let profile = ProfileStore.activeProfile(in: context)
 
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedStep = startStepText.trimmingCharacters(in: .whitespacesAndNewlines)
+
         // If focusing, route to Focus Dump
         if let active = FocusSessionStore.activeSession(in: context),
            (profile?.routeSiriToFocusDumpWhenActive ?? true) {
 
-            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            let step = startStepText.trimmingCharacters(in: .whitespacesAndNewlines)
-
             let payload: String
-            if step.isEmpty {
-                payload = trimmed
+            if trimmedStep.isEmpty {
+                payload = trimmedText
             } else {
-                // Keep it simple: store both in one dump item
                 payload =
                 """
-                \(trimmed)
-                Start: \(step)
+                \(trimmedText)
+                Start: \(trimmedStep)
                 """
             }
 
@@ -153,15 +215,15 @@ struct QuickAddView: View {
 
         // Parse input
         // If your CaptureParser requires 'now:', use the now version below.
-        // let parsed = parser.parse(text, profile: profile, now: .now)
-        let parsed = parser.parse(text, profile: profile)
+        // let parsed = parser.parse(trimmedText, profile: profile, now: .now)
+        let parsed = parser.parse(trimmedText, profile: profile)
 
         let startStepToUse = resolvedStartStep(parsedStartStep: parsed.startStep)
 
         // Inbox-only mode: always create InboxItem
         if mode == .inboxOnly {
             let inbox = InboxItem(
-                content: text,
+                content: trimmedText,
                 title: parsed.title,
                 source: .app,
                 startStep: startStepToUse,
@@ -223,7 +285,7 @@ struct QuickAddView: View {
             resetStateAndDismiss()
         } else {
             let inbox = InboxItem(
-                content: text,
+                content: trimmedText,
                 title: parsed.title,
                 source: .app,
                 startStep: startStepToUse,
