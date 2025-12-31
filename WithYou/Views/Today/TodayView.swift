@@ -26,6 +26,7 @@ struct TodayView: View {
     @State private var toastMessage: String?
     @State private var showProfiles = false
     @State private var showRescheduleForReminder: VerboseReminder?
+    @State private var showStuck = false
 
     var body: some View {
         NavigationStack {
@@ -144,6 +145,18 @@ struct TodayView: View {
                     }
                     .buttonStyle(.bordered)
                     .padding(.horizontal)
+                    
+                    Button {
+                        showStuck = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "hand.raised")
+                            Text("I’m stuck")
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(.bordered)
+                    .padding(.horizontal)
 
                     // Gentle Inbox indicator (no guilt)
                     if !inboxItems.isEmpty {
@@ -200,6 +213,14 @@ struct TodayView: View {
             }
             .sheet(isPresented: $showProfiles) {
                 NavigationStack { ProfilesView() }
+            }
+            .sheet(isPresented: $showStuck) {
+                StuckView(
+                    selectedTab: $selectedTab,
+                    focusSessions: sessions,
+                    reminders: reminders,
+                    inboxItems: inboxItems
+                )
             }
         }
     }
