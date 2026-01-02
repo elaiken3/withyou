@@ -20,57 +20,83 @@ struct FocusTimerView: View {
     @State private var showRefocus = false
     @State private var timer: Timer?
 
-    // Resume-safe timing
     @State private var startedAt: Date?
-
-    // End-of-timer UX
     @State private var showTimeUpSheet: Bool = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(format(secondsRemaining))
-                .font(.system(size: 56, weight: .bold, design: .rounded))
+        ZStack {
+            Color.appBackground.ignoresSafeArea()
 
-            // Copy polish
-            if isPaused {
-                Text("Paused. You can resume when you’re ready.")
-                    .foregroundStyle(.secondary)
-            } else if secondsRemaining == 0 {
-                Text("Overtime. Wrap up when you’re ready.")
-                    .foregroundStyle(.secondary)
-            } else {
-                Text("Only this matters right now.")
-                    .foregroundStyle(.secondary)
-            }
+            VStack(alignment: .leading, spacing: 16) {
+                Text(format(secondsRemaining))
+                    .font(.system(size: 56, weight: .bold, design: .rounded))
+                    .foregroundStyle(.appPrimaryText)
 
-            Text(session.focusTitle)
-                .font(.title2)
-                .bold()
-
-            if !session.focusStartStep.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text("Start: \(session.focusStartStep)")
-                    .foregroundStyle(.secondary)
-            }
-
-            HStack {
-                Button(isPaused ? "Resume" : "Pause") {
-                    togglePause()
+                if isPaused {
+                    Text("Paused. You can resume when you’re ready.")
+                        .foregroundStyle(.appSecondaryText)
+                } else if secondsRemaining == 0 {
+                    Text("Overtime. Wrap up when you’re ready.")
+                        .foregroundStyle(.appSecondaryText)
+                } else {
+                    Text("Only this matters right now.")
+                        .foregroundStyle(.appSecondaryText)
                 }
-                .buttonStyle(.bordered)
 
-                Button("Refocus") { showRefocus = true }
+                // Main focus card
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(session.focusTitle)
+                        .font(.title2)
+                        .bold()
+                        .foregroundStyle(.appPrimaryText)
+
+                    if !session.focusStartStep.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text("Start: \(session.focusStartStep)")
+                            .foregroundStyle(.appSecondaryText)
+                    }
+                }
+                .padding(14)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(.appSurface)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(.appHairline.opacity(0.10), lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.03), radius: 8, x: 0, y: 4)
+
+                HStack {
+                    Button(isPaused ? "Resume" : "Pause") {
+                        Haptics.tap()
+                        togglePause()
+                    }
                     .buttonStyle(.bordered)
 
-                Button("Add thought") { showAddThought = true }
+                    Button("Refocus") {
+                        Haptics.tap()
+                        showRefocus = true
+                    }
                     .buttonStyle(.bordered)
 
-                Button("End") { endSession() }
+                    Button("Add thought") {
+                        Haptics.tap()
+                        showAddThought = true
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button("End") {
+                        Haptics.tap()
+                        endSession()
+                    }
                     .buttonStyle(.borderedProminent)
-            }
+                }
+                .tint(.appAccent)
 
-            Spacer()
+                Spacer()
+            }
+            .padding()
         }
-        .padding()
         .onAppear {
             hydratePauseStateFromSession()
             ensureStartedAt()
@@ -78,102 +104,147 @@ struct FocusTimerView: View {
             startTimer()
         }
         .onDisappear { timer?.invalidate() }
-        .sheet(isPresented: $showAddThought) { addThoughtSheet }
-        .sheet(isPresented: $showRefocus) { RefocusView() }
-        .sheet(isPresented: $showTimeUpSheet) { timeUpSheet }
+        .sheet(isPresented: $showAddThought) {
+            addThoughtSheet
+                .presentationBackground(Color.appBackground)
+        }
+        .sheet(isPresented: $showRefocus) {
+            RefocusView()
+                .presentationBackground(Color.appBackground)
+        }
+        .sheet(isPresented: $showTimeUpSheet) {
+            timeUpSheet
+                .presentationBackground(Color.appBackground)
+        }
     }
 
     // MARK: - Sheets
 
     private var addThoughtSheet: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Park a thought")
-                    .font(.title2)
-                    .bold()
+            ZStack {
+                Color.appBackground.ignoresSafeArea()
 
-                TextField("Type or dictate…", text: $thoughtText, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Park a thought")
+                        .font(.title2)
+                        .bold()
+                        .foregroundStyle(.appPrimaryText)
 
-                Button("Save") {
-                    let trimmed = thoughtText.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !trimmed.isEmpty {
-                        context.insert(FocusDumpItem(text: trimmed, sessionId: session.id))
-                        try? context.save()
+                    CardTextEditor(
+                        placeholder: "Type or dictate…",
+                        text: $thoughtText,
+                        icon: "brain",
+                        minHeight: 120
+                    )
+
+                    Button("Save") {
+                        Haptics.tap()
+                        let trimmed = thoughtText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !trimmed.isEmpty {
+                            context.insert(FocusDumpItem(text: trimmed, sessionId: session.id))
+                            do {
+                                try context.save()
+                                Haptics.success()
+                            } catch {
+                                Haptics.error()
+                                print("❌ Save failed (addThought):", error)
+                            }
+                        }
+                        thoughtText = ""
+                        showAddThought = false
                     }
-                    thoughtText = ""
-                    showAddThought = false
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(thoughtText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .buttonStyle(.borderedProminent)
+                    .tint(.appAccent)
+                    .disabled(thoughtText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
-                Spacer()
+                    Spacer()
+                }
+                .padding()
             }
-            .padding()
             .navigationTitle("Add thought")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Close") { showAddThought = false }
+                    Button("Close") {
+                        Haptics.tap()
+                        showAddThought = false
+                    }
                 }
             }
+            .tint(.appAccent)
         }
     }
 
     private var timeUpSheet: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Time’s up.")
-                    .font(.title2)
-                    .bold()
+            ZStack {
+                Color.appBackground.ignoresSafeArea()
 
-                Text("That counted. Want to wrap up, extend a little, or keep going?")
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("Time’s up.")
+                        .font(.title2)
+                        .bold()
+                        .foregroundStyle(.appPrimaryText)
 
-                Button {
-                    extend(byMinutes: 5)
-                    showTimeUpSheet = false
-                } label: {
-                    HStack {
-                        Image(systemName: "plus.circle")
-                        Text("Extend 5 minutes")
+                    Text("That counted. Want to wrap up, extend a little, or keep going?")
+                        .foregroundStyle(.appSecondaryText)
+
+                    Button {
+                        Haptics.tap()
+                        extend(byMinutes: 5)
+                        Haptics.success()
+                        showTimeUpSheet = false
+                    } label: {
+                        HStack {
+                            Image(systemName: "plus.circle")
+                            Text("Extend 5 minutes")
+                        }
+                        .frame(maxWidth: .infinity)
                     }
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
+                    .buttonStyle(.borderedProminent)
+                    .tint(.appAccent)
 
-                Button {
-                    // Keep going: dismiss. Session remains active.
-                    showTimeUpSheet = false
-                } label: {
-                    HStack {
-                        Image(systemName: "forward")
-                        Text("Keep going")
+                    Button {
+                        Haptics.tap()
+                        showTimeUpSheet = false
+                    } label: {
+                        HStack {
+                            Image(systemName: "forward")
+                            Text("Keep going")
+                        }
+                        .frame(maxWidth: .infinity)
                     }
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
+                    .buttonStyle(.bordered)
 
-                Button(role: .destructive) {
-                    showTimeUpSheet = false
-                    endSession()
-                } label: {
-                    HStack {
-                        Image(systemName: "checkmark.circle")
-                        Text("Wrap up")
+                    Button(role: .destructive) {
+                        Haptics.tap()
+                        showTimeUpSheet = false
+                        endSession()
+                    } label: {
+                        HStack {
+                            Image(systemName: "checkmark.circle")
+                            Text("Wrap up")
+                        }
+                        .frame(maxWidth: .infinity)
                     }
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
+                    .buttonStyle(.bordered)
 
-                Spacer()
+                    Spacer()
+                }
+                .padding()
             }
-            .padding()
             .navigationTitle("Session")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Close") { showTimeUpSheet = false }
+                    Button("Close") {
+                        Haptics.tap()
+                        showTimeUpSheet = false
+                    }
                 }
             }
+            .tint(.appAccent)
         }
         .presentationDetents([.medium])
     }
@@ -201,22 +272,35 @@ struct FocusTimerView: View {
     private func endSession() {
         timer?.invalidate()
 
-        // (3) Cancel focus-end notification when ending early / wrapping up
         NotificationManager.shared.cancelFocusEnd(sessionId: session.id)
 
         session.isActive = false
         session.endedAt = Date()
-        try? context.save()
+
+        do {
+            try context.save()
+            Haptics.success()
+        } catch {
+            Haptics.error()
+            print("❌ Save failed (endSession):", error)
+        }
+
         onFinish()
     }
 
-
     private func extend(byMinutes minutes: Int) {
         session.durationSeconds += minutes * 60
-        try? context.save()
+
+        do {
+            try context.save()
+            Haptics.success()
+        } catch {
+            Haptics.error()
+            print("❌ Save failed (extend):", error)
+        }
+
         recalcRemaining()
 
-        // (2) Reschedule focus-end notification after extending
         Task {
             guard let started = session.startedAt else { return }
             let endDate = started.addingTimeInterval(TimeInterval(session.durationSeconds))
@@ -232,13 +316,11 @@ struct FocusTimerView: View {
     // MARK: - Pause persistence + time math
 
     private func hydratePauseStateFromSession() {
-        // session.pausedSeconds persists across restarts
         if let pausedAt = session.pausedAt {
-            // If the app was killed while paused, count time since pausedAt too
             let extra = Int(Date().timeIntervalSince(pausedAt))
             if extra > 0 {
                 session.pausedSeconds += extra
-                session.pausedAt = Date() // keep it paused, but reset anchor
+                session.pausedAt = Date()
                 try? context.save()
             }
             isPaused = true
@@ -250,9 +332,12 @@ struct FocusTimerView: View {
     private func ensureStartedAt() {
         if session.startedAt == nil {
             session.startedAt = Date()
-            try? context.save()
+            do {
+                try context.save()
+            } catch {
+                print("❌ Save failed (ensureStartedAt):", error)
+            }
 
-            // (1) Schedule focus-end notification when the session starts
             Task {
                 let endDate = (session.startedAt ?? Date())
                     .addingTimeInterval(TimeInterval(session.durationSeconds))
@@ -268,7 +353,6 @@ struct FocusTimerView: View {
 
     private func togglePause() {
         if isPaused {
-            // ✅ RESUME: add elapsed paused time (if any) to pausedSeconds and clear pausedAt
             if let pausedAt = session.pausedAt {
                 let delta = Int(Date().timeIntervalSince(pausedAt))
                 if delta > 0 { session.pausedSeconds += delta }
@@ -276,10 +360,16 @@ struct FocusTimerView: View {
             session.pausedAt = nil
             isPaused = false
 
-            try? context.save()
+            do {
+                try context.save()
+                Haptics.success()
+            } catch {
+                Haptics.error()
+                print("❌ Save failed (resumePause):", error)
+            }
+
             recalcRemaining()
 
-            // 🔔 Reschedule focus-end notification using remaining time
             Task {
                 let endDate = Date().addingTimeInterval(TimeInterval(secondsRemaining))
                 NotificationManager.shared.cancelFocusEnd(sessionId: session.id)
@@ -291,14 +381,18 @@ struct FocusTimerView: View {
             }
 
         } else {
-            // ✅ PAUSE: set pausedAt now (persisted)
             session.pausedAt = Date()
             isPaused = true
 
-            try? context.save()
-            recalcRemaining()
+            do {
+                try context.save()
+                Haptics.success()
+            } catch {
+                Haptics.error()
+                print("❌ Save failed (pause):", error)
+            }
 
-            // 🔕 Cancel focus-end notification while paused
+            recalcRemaining()
             NotificationManager.shared.cancelFocusEnd(sessionId: session.id)
         }
     }
@@ -311,7 +405,6 @@ struct FocusTimerView: View {
 
         let elapsed = Int(Date().timeIntervalSince(startedAt))
 
-        // If currently paused, include time since pausedAt too (so remaining stays stable)
         let livePausedExtra: Int
         if let pausedAt = session.pausedAt {
             livePausedExtra = Int(Date().timeIntervalSince(pausedAt))

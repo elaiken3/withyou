@@ -18,12 +18,12 @@ struct FocusSessionFlowView: View {
 
     @State private var session: FocusSession?
     @State private var dumpText: String = ""
-    
+
     @State private var showCustomDurationSheet = false
     @State private var customMinutes: Int = 25
     @State private var saveAsPreset: Bool = true
     @State private var presetLabel: String = ""
-    
+
     @State private var activeProfile: UserProfile?
     @State private var presets: [FocusDurationPreset] = []
 
@@ -31,141 +31,186 @@ struct FocusSessionFlowView: View {
 
     var body: some View {
         NavigationStack {
-            switch step {
-            case .setup:
-                setupView
-            case .dump:
-                dumpView
-            case .running:
-                if let s = session {
-                    FocusTimerView(session: s) { step = .review }
-                } else {
+            ZStack {
+                Color.appBackground.ignoresSafeArea()
+
+                switch step {
+                case .setup:
                     setupView
-                }
-            case .review:
-                if let s = session {
-                    FocusReviewView(session: s) {
-                        step = .setup
-                        session = nil
+                case .dump:
+                    dumpView
+                case .running:
+                    if let s = session {
+                        FocusTimerView(session: s) { step = .review }
+                    } else {
+                        setupView
                     }
-                } else {
-                    setupView
+                case .review:
+                    if let s = session {
+                        FocusReviewView(session: s) {
+                            step = .setup
+                            session = nil
+                        }
+                    } else {
+                        setupView
+                    }
                 }
             }
+            .tint(.appAccent)
+            .navigationBarTitleDisplayMode(.inline)
         }
         .onAppear {
-            // Ensure profile exists
             ProfileStore.ensureDefaultProfile(in: context)
 
-            // Load active profile
             activeProfile = ProfileStore.activeProfile(in: context)
 
-            // Set default duration + load presets
             if let p = activeProfile {
                 durationSeconds = p.defaultFocusMinutes * 60
                 presets = FocusPresetStore.presets(for: p.id, in: context)
             }
 
-            // Resume active focus session if one exists
             loadActiveSessionIfNeeded()
+        }
+        .sheet(isPresented: $showCustomDurationSheet) {
+            customDurationSheet
+                .presentationBackground(Color.appBackground)
         }
     }
 
     // MARK: - Views
 
     private var setupView: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Focus Session").font(.largeTitle).bold()
-            Text("Pick one thing. We’ll protect your attention for a short window.")
-                .foregroundStyle(.secondary)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Focus Session")
+                        .font(.largeTitle).bold()
+                        .foregroundStyle(.appPrimaryText)
 
-            TextField("Focus on… (e.g., Read Chapter 3)", text: $focusTitle)
-                .textFieldStyle(.roundedBorder)
+                    Text("Pick one thing. We’ll protect your attention for a short window.")
+                        .foregroundStyle(.appSecondaryText)
+                }
 
-            TextField("Optional start step", text: $focusStartStep)
-                .textFieldStyle(.roundedBorder)
+                // Title (card input)
+                CardTextEditor(
+                    placeholder: "Focus on… (e.g., Read Chapter 3)",
+                    text: $focusTitle,
+                    icon: "target",
+                    minHeight: 80
+                )
 
-            Text("Duration").font(.headline)
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Duration").font(.headline)
+                // Optional start step (card input)
+                CardTextEditor(
+                    placeholder: "Optional start step",
+                    text: $focusStartStep,
+                    icon: "arrow.right.circle",
+                    minHeight: 70
+                )
 
-                // Presets row
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
-                        // Default built-ins (keep your classics)
-                        durationButton("25", 25 * 60)
-                        durationButton("45", 45 * 60)
-                        durationButton("60", 60 * 60)
+                // Duration card
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Duration")
+                        .font(.headline)
+                        .foregroundStyle(.appPrimaryText)
 
-                        // User presets (per profile)
-                        ForEach(presets) { p in
-                            durationButton(p.label, p.minutes * 60)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            durationButton("25", 25 * 60)
+                            durationButton("45", 45 * 60)
+                            durationButton("60", 60 * 60)
+
+                            ForEach(presets) { p in
+                                durationButton(p.label, p.minutes * 60)
+                            }
+
+                            Button {
+                                Haptics.tap()
+                                customMinutes = max(1, durationSeconds / 60)
+                                presetLabel = ""
+                                saveAsPreset = true
+                                showCustomDurationSheet = true
+                            } label: {
+                                Label("Custom", systemImage: "slider.horizontal.3")
+                            }
+                            .buttonStyle(.bordered)
                         }
-
-                        Button {
-                            customMinutes = max(1, durationSeconds / 60)
-                            presetLabel = ""
-                            saveAsPreset = true
-                            showCustomDurationSheet = true
-                        } label: {
-                            Label("Custom", systemImage: "slider.horizontal.3")
-                        }
-                        .buttonStyle(.bordered)
+                        .padding(.vertical, 2)
                     }
                 }
-            }
-            .sheet(isPresented: $showCustomDurationSheet) {
-                customDurationSheet
-            }
+                .padding(14)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(.appSurface)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(.appHairline.opacity(0.10), lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.03), radius: 8, x: 0, y: 4)
 
+                Button("Continue") {
+                    Haptics.tap()
+                    startSession()
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .buttonStyle(.borderedProminent)
+                .tint(.appAccent)
+                .disabled(focusTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
-            Button("Continue") {
-                startSession()
+                Spacer(minLength: 24)
             }
-            .frame(maxWidth: .infinity)
-            .buttonStyle(BorderedProminentButtonStyle())
-            .disabled(focusTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-            Spacer()
+            .padding()
         }
-        .padding()
+        .navigationTitle("Focus")
     }
-    
+
     private var customDurationSheet: some View {
         NavigationStack {
-            Form {
-                Section {
-                    Stepper(value: $customMinutes, in: 1...240, step: 1) {
-                        Text("Minutes: \(customMinutes)")
-                    }
-                    Text("This will set your focus session to \(customMinutes) minutes.")
-                        .foregroundStyle(.secondary)
-                }
+            ZStack {
+                Color.appBackground.ignoresSafeArea()
 
-                Section {
-                    Toggle("Save as preset", isOn: $saveAsPreset)
+                Form {
+                    Section {
+                        Stepper(value: $customMinutes, in: 1...240, step: 1) {
+                            Text("Minutes: \(customMinutes)")
+                                .foregroundStyle(.appPrimaryText)
+                        }
+                        Text("This will set your focus session to \(customMinutes) minutes.")
+                            .foregroundStyle(.appSecondaryText)
+                    }
 
-                    if saveAsPreset {
-                        TextField("Preset name (optional)", text: $presetLabel)
-                        Text("Examples: “Deep work”, “Quick win”, “Reading”.")
-                            .foregroundStyle(.secondary)
+                    Section {
+                        Toggle("Save as preset", isOn: $saveAsPreset)
+                            .tint(.appAccent)
+
+                        if saveAsPreset {
+                            TextField("Preset name (optional)", text: $presetLabel)
+                            Text("Examples: “Deep work”, “Quick win”, “Reading”.")
+                                .foregroundStyle(.appSecondaryText)
+                        }
                     }
                 }
+                .scrollContentBackground(.hidden)
             }
             .navigationTitle("Custom Duration")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") { showCustomDurationSheet = false }
+                    Button("Cancel") {
+                        Haptics.tap()
+                        showCustomDurationSheet = false
+                    }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Set") {
+                        Haptics.tap()
                         durationSeconds = customMinutes * 60
 
                         if saveAsPreset, let profile = activeProfile {
                             let label = presetLabel.trimmingCharacters(in: .whitespacesAndNewlines)
                             let finalLabel = label.isEmpty ? "\(customMinutes) min" : label
 
-                            // Avoid duplicate minutes/label combos (simple guard)
                             let exists = presets.contains { $0.minutes == customMinutes && $0.label == finalLabel }
                             if !exists {
                                 FocusPresetStore.addPreset(
@@ -178,11 +223,13 @@ struct FocusSessionFlowView: View {
                             }
                         }
 
+                        Haptics.success()
                         showCustomDurationSheet = false
                     }
                     .fontWeight(.semibold)
                 }
             }
+            .tint(.appAccent)
         }
     }
 
@@ -190,57 +237,101 @@ struct FocusSessionFlowView: View {
     private func durationButton(_ label: String, _ seconds: Int) -> some View {
         let isSelected = (durationSeconds == seconds)
 
-        Button("\(label) min") { durationSeconds = seconds }
-            .frame(maxWidth: .infinity)
-            .modifier(ConditionalButtonStyle(isProminent: isSelected))
+        Button("\(label) min") {
+            Haptics.tap()
+            durationSeconds = seconds
+        }
+        .modifier(ConditionalButtonStyle(isProminent: isSelected))
+        .tint(isSelected ? .appAccent : .appAccent)
     }
 
     private var dumpView: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Brain Dump").font(.largeTitle).bold()
-            Text("What’s pulling at your attention? Park it here so you can focus.")
-                .foregroundStyle(.secondary)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Brain Dump")
+                        .font(.largeTitle).bold()
+                        .foregroundStyle(.appPrimaryText)
 
-            HStack {
-                TextField("Add a thought…", text: $dumpText)
-                    .textFieldStyle(.roundedBorder)
-
-                Button("Add") { addDumpItem() }
-                    .buttonStyle(BorderedProminentButtonStyle())
-                    .disabled(dumpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-
-            if let s = session {
-                FocusDumpList(sessionId: s.id)
-            }
-
-            Button("Begin Focus") {
-                // Ensure startedAt is set the moment we actually "begin"
-                if let s = session, s.startedAt == nil {
-                    s.startedAt = Date()
-                    s.isActive = true
-                    s.endedAt = nil
-                    try? context.save()
+                    Text("What’s pulling at your attention? Park it here so you can focus.")
+                        .foregroundStyle(.appSecondaryText)
                 }
-                step = .running
+
+                // Add thought row as a card
+                VStack(alignment: .leading, spacing: 10) {
+                    CardTextEditor(
+                        placeholder: "Add a thought…",
+                        text: $dumpText,
+                        icon: "tray.full",
+                        minHeight: 70
+                    )
+
+                    Button("Add") {
+                        Haptics.tap()
+                        addDumpItem()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.appAccent)
+                    .disabled(dumpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                .padding(14)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(.appSurface)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(.appHairline.opacity(0.10), lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.03), radius: 8, x: 0, y: 4)
+
+                if let s = session {
+                    FocusDumpList(sessionId: s.id)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .stroke(.appHairline.opacity(0.10), lineWidth: 1)
+                        )
+                }
+
+                Button("Begin Focus") {
+                    Haptics.tap()
+                    if let s = session, s.startedAt == nil {
+                        s.startedAt = Date()
+                        s.isActive = true
+                        s.endedAt = nil
+                        do {
+                            try context.save()
+                            Haptics.success()
+                        } catch {
+                            Haptics.error()
+                            print("❌ Save failed (beginFocus):", error)
+                        }
+                    } else {
+                        Haptics.success()
+                    }
+                    step = .running
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .buttonStyle(.borderedProminent)
+                .tint(.appAccent)
+                .disabled(session == nil)
+
+                Text("You don’t need to remember these during this session.")
+                    .font(.footnote)
+                    .foregroundStyle(.appSecondaryText)
+
+                Spacer(minLength: 24)
             }
-            .frame(maxWidth: .infinity)
-            .buttonStyle(BorderedProminentButtonStyle())
-            .disabled(session == nil)
-
-            Text("You don’t need to remember these during this session.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-
-            Spacer()
+            .padding()
         }
-        .padding()
+        .navigationTitle("Focus")
     }
 
     // MARK: - Actions
 
     private func startSession() {
-        // End existing active session (MVP)
         if let existing = FocusSessionStore.activeSession(in: context) {
             existing.isActive = false
             existing.endedAt = Date()
@@ -253,7 +344,7 @@ struct FocusSessionFlowView: View {
             focusStartStep: focusStartStep.trimmingCharacters(in: .whitespacesAndNewlines),
             durationSeconds: durationSeconds,
             createdAt: Date(),
-            startedAt: nil,      // we set this on "Begin Focus"
+            startedAt: nil,
             endedAt: nil,
             isActive: true
         )
@@ -261,9 +352,11 @@ struct FocusSessionFlowView: View {
         context.insert(s)
         do {
             try context.save()
+            Haptics.success()
             session = s
             step = .dump
         } catch {
+            Haptics.error()
             print("❌ Save failed (startSession):", error)
         }
     }
@@ -277,8 +370,10 @@ struct FocusSessionFlowView: View {
 
         do {
             try context.save()
+            Haptics.success()
             dumpText = ""
         } catch {
+            Haptics.error()
             print("❌ Save failed (addDumpItem):", error)
         }
     }
@@ -316,25 +411,36 @@ private struct FocusDumpList: View {
         List {
             ForEach(items) { item in
                 Text(item.text)
+                    .foregroundStyle(.appPrimaryText)
+                    .listRowBackground(Color.appSurface)
             }
             .onDelete { idx in
+                Haptics.tap()
                 for i in idx {
                     context.delete(items[i])
                 }
-                try? context.save()
+                do {
+                    try context.save()
+                    Haptics.success()
+                } catch {
+                    Haptics.error()
+                    print("❌ Save failed (deleteDumpItem):", error)
+                }
             }
         }
-        .frame(minHeight: 140)
+        .scrollContentBackground(.hidden)
+        .background(Color.appSurface)
+        .frame(minHeight: 160)
     }
 }
+
 private struct ConditionalButtonStyle: ViewModifier {
     let isProminent: Bool
     func body(content: Content) -> some View {
         if isProminent {
-            content.buttonStyle(BorderedProminentButtonStyle())
+            content.buttonStyle(.borderedProminent)
         } else {
-            content.buttonStyle(BorderedButtonStyle())
+            content.buttonStyle(.bordered)
         }
     }
 }
-

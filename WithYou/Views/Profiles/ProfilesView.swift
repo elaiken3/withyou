@@ -87,6 +87,24 @@ private struct ProfileDetailView: View {
                 }
             }
 
+            Section("Appearance") {
+                Picker("Theme", selection: Binding(
+                    get: { profile.colorSchemeRaw },
+                    set: { newValue in
+                        Haptics.tap()
+                        profile.colorSchemeRaw = newValue
+                        try? context.save()
+                        NotificationCenter.default.post(name: .appearancePreferenceChanged, object: nil)
+                        Haptics.success()
+                    }
+                )) {
+                    Text("System").tag(AppColorScheme.system.rawValue)
+                    Text("Light").tag(AppColorScheme.light.rawValue)
+                    Text("Dark").tag(AppColorScheme.dark.rawValue)
+                }
+                .pickerStyle(.segmented)
+            }
+
             Section("Defaults") {
                 Stepper("Morning hour: \(profile.morningHour)", value: $profile.morningHour, in: 5...12)
                 Stepper("Afternoon hour: \(profile.afternoonHour)", value: $profile.afternoonHour, in: 12...17)
@@ -106,4 +124,3 @@ private struct ProfileDetailView: View {
         .onDisappear { try? context.save() }
     }
 }
-

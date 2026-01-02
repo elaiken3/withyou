@@ -19,52 +19,80 @@ struct InboxDetailView: View {
     @State private var confirmNotNeeded = false
 
     var body: some View {
-        List {
-            Section("Captured") {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(item.title)
-                        .font(.headline)
+        ZStack {
+            Color.appBackground.ignoresSafeArea()
 
-                    Text(item.content)
-                        .foregroundStyle(.secondary)
+            List {
+                Section("Captured") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(item.title)
+                            .font(.headline)
+                            .foregroundStyle(.appPrimaryText)
 
-                    Text("Start: \(item.startStep) (\(item.estimateMinutes) min)")
-                        .foregroundStyle(.secondary)
+                        Text(item.content)
+                            .foregroundStyle(.appSecondaryText)
+
+                        Text("Start: \(item.startStep) (\(item.estimateMinutes) min)")
+                            .foregroundStyle(.appSecondaryText)
+                    }
+                    .padding(14)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(.appSurface)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(.appHairline.opacity(0.10), lineWidth: 1)
+                    )
+                    .shadow(color: .black.opacity(0.03), radius: 8, x: 0, y: 4)
+                    .padding(.vertical, 6)
+                    .listRowBackground(Color.appBackground)
+                    .listRowSeparator(.hidden)
                 }
-                .padding(.vertical, 6)
+
+                Section("Actions") {
+                    Button {
+                        Haptics.tap()
+                        showSchedule = true
+                    } label: {
+                        Label("Schedule", systemImage: "calendar.badge.plus")
+                    }
+                    .listRowBackground(Color.appBackground)
+
+                    Button {
+                        Haptics.tap()
+                        makeSmaller()
+                    } label: {
+                        Label("Make smaller (2 min)", systemImage: "scissors")
+                    }
+                    .listRowBackground(Color.appBackground)
+
+                    Button(role: .destructive) {
+                        Haptics.tap()
+                        confirmNotNeeded = true
+                    } label: {
+                        Label("Not needed", systemImage: "trash")
+                    }
+                    .disabled(isDeleting)
+                    .listRowBackground(Color.appBackground)
+                }
             }
-
-            Section("Actions") {
-                Button {
-                    showSchedule = true
-                } label: {
-                    Label("Schedule", systemImage: "calendar.badge.plus")
-                }
-
-                Button {
-                    makeSmaller()
-                } label: {
-                    Label("Make smaller (2 min)", systemImage: "scissors")
-                }
-
-                Button(role: .destructive) {
-                    confirmNotNeeded = true
-                } label: {
-                    Label("Not needed", systemImage: "trash")
-                }
-                .disabled(isDeleting)
-            }
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
+            .background(Color.appBackground)
         }
         .navigationTitle("Inbox Item")
         .navigationBarTitleDisplayMode(.inline)
+        .tint(.appAccent)
         .sheet(isPresented: $showSchedule) {
-            ScheduleSheet(
+            ScheduleSheetV2(
                 title: item.title,
                 startStep: item.startStep,
                 estimate: item.estimateMinutes
             ) { date in
                 schedule(date: date)
             }
+            .presentationBackground(Color.appBackground)
         }
         .confirmationDialog(
             "Let this go?",
@@ -85,13 +113,14 @@ struct InboxDetailView: View {
 
         do {
             try context.save()
+            Haptics.success()
         } catch {
+            Haptics.error()
             print("❌ Save failed (makeSmaller):", error)
         }
     }
 
     private func makeSmallerStep(for title: String) -> String {
-        // Simple v1 heuristic. You can get smarter later.
         "Open what you need and do the smallest possible step for 2 minutes."
     }
 
@@ -103,14 +132,18 @@ struct InboxDetailView: View {
 
         do {
             try context.save()
+            Haptics.success()
             dismiss() // pop back immediately so it “disappears”
         } catch {
+            Haptics.error()
             print("❌ Save failed (delete):", error)
             isDeleting = false
         }
     }
 
     private func schedule(date: Date) {
+        Haptics.tap()
+
         let reminder = VerboseReminder(
             title: item.title,
             startStep: item.startStep,
@@ -123,9 +156,12 @@ struct InboxDetailView: View {
 
         do {
             try context.save()
-            dismiss() // optional but feels right: scheduled items leave Inbox
+            Haptics.success()
+            dismiss() // scheduled items leave Inbox
         } catch {
+            Haptics.error()
             print("❌ Save failed (schedule):", error)
+            return
         }
 
         Task {
@@ -143,6 +179,7 @@ struct InboxDetailView: View {
                     scheduledAt: reminder.scheduledAt
                 )
             } catch {
+                // Not fatal; reminder exists in SwiftData.
                 print("❌ Notification schedule failed:", error)
             }
         }

@@ -89,6 +89,7 @@ struct QuickAddView: View {
 
                     HStack(spacing: 12) {
                         Button {
+                            Haptics.tap()
                             save(mode: .smart)
                         } label: {
                             Text("Save")
@@ -98,6 +99,7 @@ struct QuickAddView: View {
                         .disabled(isSaveDisabled)
 
                         Button {
+                            Haptics.tap()
                             save(mode: .inboxOnly)
                         } label: {
                             Text("Inbox only")
@@ -122,12 +124,15 @@ struct QuickAddView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel") {
+                        Haptics.tap()
                         clearAndDismiss()
                     }
                 }
 
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Close") { dismiss() }
+                    Button("Close") {
+                        Haptics.tap()
+                        dismiss() }
                 }
 
                 ToolbarItemGroup(placement: .keyboard) {
@@ -215,8 +220,10 @@ struct QuickAddView: View {
             context.insert(FocusDumpItem(text: payload, sessionId: active.id))
             do {
                 try context.save()
+                Haptics.success()
                 resetStateAndDismiss()
             } catch {
+                Haptics.error()
                 lastErrorMessage = "Couldn’t save. Try again."
                 print("❌ Save failed (FocusDump):", error)
             }
@@ -241,8 +248,10 @@ struct QuickAddView: View {
 
             do {
                 try context.save()
+                Haptics.success()
                 resetStateAndDismiss()
             } catch {
+                Haptics.error()
                 lastErrorMessage = "Couldn’t save to Inbox. Try again."
                 print("❌ Save failed (InboxOnly):", error)
             }
@@ -263,7 +272,9 @@ struct QuickAddView: View {
 
             do {
                 try context.save()
+                Haptics.success()
             } catch {
+                Haptics.error()
                 lastErrorMessage = "Couldn’t schedule. Try again."
                 print("❌ Save failed (Reminder):", error)
                 isSaving = false
@@ -302,8 +313,10 @@ struct QuickAddView: View {
 
             do {
                 try context.save()
+                Haptics.success()
                 resetStateAndDismiss()
             } catch {
+                Haptics.error()
                 lastErrorMessage = "Couldn’t save to Inbox. Try again."
                 print("❌ Save failed (Inbox):", error)
             }
