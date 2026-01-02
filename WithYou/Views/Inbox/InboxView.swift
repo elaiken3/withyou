@@ -13,6 +13,7 @@ struct InboxView: View {
     @Query(sort: \InboxItem.createdAt, order: .reverse) private var items: [InboxItem]
 
     @State private var showQuickAdd = false
+    @State private var itemPendingDeletion: InboxItem?
 
     var body: some View {
         NavigationStack {
@@ -34,11 +35,11 @@ struct InboxView: View {
                         } label: {
                             InboxRow(item: item)
                         }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             Button(role: .destructive) {
-                                delete(item)
+                                itemPendingDeletion = item
                             } label: {
-                                Label("Delete", systemImage: "trash")
+                                Label("Not needed", systemImage: "trash")
                             }
                         }
                     }
@@ -58,6 +59,24 @@ struct InboxView: View {
             .sheet(isPresented: $showQuickAdd) {
                 QuickAddView()
             }
+            .confirmationDialog(
+                "Let this go?",
+                isPresented: Binding(
+                    get: { itemPendingDeletion != nil },
+                    set: { if !$0 { itemPendingDeletion = nil } }
+                ),
+                presenting: itemPendingDeletion
+            ) { item in
+                Button("Let go", role: .destructive) {
+                    delete(item)
+                    itemPendingDeletion = nil
+                }
+                Button("Keep", role: .cancel) {
+                    itemPendingDeletion = nil
+                }
+            } message: { _ in
+                Text("You don’t have to do everything.")
+            }
         }
     }
 
@@ -66,7 +85,7 @@ struct InboxView: View {
         do {
             try context.save()
         } catch {
-            print("❌ Save failed (delete from swipe):", error)
+            print("❌ Save failed (delete):", error)
         }
     }
 }
