@@ -10,11 +10,13 @@ import SwiftData
 
 struct InboxDetailView: View {
     @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
 
     let item: InboxItem
 
     @State private var showSchedule = false
     @State private var isDeleting = false
+    @State private var confirmNotNeeded = false
 
     var body: some View {
         List {
@@ -46,7 +48,7 @@ struct InboxDetailView: View {
                 }
 
                 Button(role: .destructive) {
-                    deleteItem()
+                    confirmNotNeeded = true
                 } label: {
                     Label("Not needed", systemImage: "trash")
                 }
@@ -63,6 +65,17 @@ struct InboxDetailView: View {
             ) { date in
                 schedule(date: date)
             }
+        }
+        .confirmationDialog(
+            "Let this go?",
+            isPresented: $confirmNotNeeded
+        ) {
+            Button("Let go", role: .destructive) {
+                deleteItem()
+            }
+            Button("Keep", role: .cancel) { }
+        } message: {
+            Text("You don’t have to do everything.")
         }
     }
 
@@ -83,16 +96,18 @@ struct InboxDetailView: View {
     }
 
     private func deleteItem() {
+        guard !isDeleting else { return }
         isDeleting = true
+
         context.delete(item)
 
         do {
             try context.save()
+            dismiss() // pop back immediately so it “disappears”
         } catch {
             print("❌ Save failed (delete):", error)
+            isDeleting = false
         }
-
-        isDeleting = false
     }
 
     private func schedule(date: Date) {
@@ -108,6 +123,7 @@ struct InboxDetailView: View {
 
         do {
             try context.save()
+            dismiss() // optional but feels right: scheduled items leave Inbox
         } catch {
             print("❌ Save failed (schedule):", error)
         }
