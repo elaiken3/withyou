@@ -5,12 +5,37 @@
 //  Created by Eugene Aiken on 12/24/25.
 //
 
+import SwiftUI
 import Foundation
 import SwiftData
 
 enum ReminderTone: String, Codable {
     case gentle
     case firm
+}
+
+enum AppColorScheme: String, Codable, CaseIterable, Identifiable {
+    case system
+    case light
+    case dark
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .system: return "System"
+        case .light:  return "Light"
+        case .dark:   return "Dark"
+        }
+    }
+
+    var preferred: ColorScheme? {
+        switch self {
+        case .system: return nil
+        case .light:  return .light
+        case .dark:   return .dark
+        }
+    }
 }
 
 @Model
@@ -28,6 +53,13 @@ final class UserProfile {
 
     var defaultMantra: String
     var routeSiriToFocusDumpWhenActive: Bool
+    
+    var colorSchemeRaw: String = AppColorScheme.system.rawValue
+    
+    var colorScheme: AppColorScheme {
+        get { AppColorScheme(rawValue: colorSchemeRaw) ?? .system }
+        set { colorSchemeRaw = newValue.rawValue }
+    }
 
     init(name: String,
          tone: ReminderTone = .gentle,

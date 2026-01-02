@@ -27,77 +27,93 @@ struct QuickAddView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 12) {
+            ZStack {
+                Color.appBackground.ignoresSafeArea()
 
-                TextField("Type or dictate… (e.g., “Email landlord tomorrow morning”)", text: $text, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
+                VStack(spacing: 12) {
+
+                    // Main capture input (multi-line)
+                    CardTextEditor(
+                        placeholder: "Type or dictate… (e.g., “Email landlord tomorrow morning”)",
+                        text: $text,
+                        icon: "sparkles",
+                        minHeight: 120
+                    )
                     .padding(.horizontal)
                     .padding(.top)
                     .focused($isTextFocused)
 
-                // Optional First Step (collapsed by default)
-                Button {
-                    withAnimation(.easeInOut) { showFirstStep.toggle() }
-                    if showFirstStep {
-                        // Move focus to the first-step field when it opens
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                            isFirstStepFocused = true
+                    // Optional First Step (collapsed by default)
+                    Button {
+                        withAnimation(.easeInOut) { showFirstStep.toggle() }
+                        if showFirstStep {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                                isFirstStepFocused = true
+                            }
+                        } else {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                                isTextFocused = true
+                            }
                         }
-                    } else {
-                        // Return focus to main field when it closes
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                            isTextFocused = true
+                    } label: {
+                        HStack(spacing: 8) {
+                            Text(showFirstStep ? "Hide first step" : "Add a first step (optional)")
+                                .foregroundStyle(.appPrimaryText)
+                            Spacer()
+                            Image(systemName: showFirstStep ? "chevron.up" : "chevron.down")
+                                .foregroundStyle(.appSecondaryText)
                         }
+                        .padding(.horizontal)
+                        .padding(.vertical, 8)
                     }
-                } label: {
-                    HStack(spacing: 8) {
-                        Text(showFirstStep ? "Hide first step" : "Add a first step (optional)")
-                        Spacer()
-                        Image(systemName: showFirstStep ? "chevron.up" : "chevron.down")
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.horizontal)
-                }
-                .buttonStyle(.plain)
+                    .buttonStyle(.plain)
 
-                if showFirstStep {
-                    TextField("First step (e.g., Open the doc)", text: $startStepText, axis: .vertical)
-                        .textFieldStyle(.roundedBorder)
+                    if showFirstStep {
+                        // First step (multi-line, but smaller)
+                        CardTextEditor(
+                            placeholder: "First step (e.g., Open the doc)",
+                            text: $startStepText,
+                            icon: "arrow.right.circle",
+                            minHeight: 80
+                        )
                         .padding(.horizontal)
                         .focused($isFirstStepFocused)
-                }
-
-                if let msg = lastErrorMessage {
-                    Text(msg)
-                        .foregroundStyle(.red)
-                        .font(.footnote)
-                        .padding(.horizontal)
-                }
-
-                HStack(spacing: 12) {
-                    Button {
-                        save(mode: .smart)
-                    } label: {
-                        Text("Save")
-                            .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(isSaveDisabled)
 
-                    Button {
-                        save(mode: .inboxOnly)
-                    } label: {
-                        Text("Inbox only")
-                            .frame(maxWidth: .infinity)
+                    if let msg = lastErrorMessage {
+                        Text(msg)
+                            .foregroundStyle(.red)
+                            .font(.footnote)
+                            .padding(.horizontal)
                     }
-                    .buttonStyle(.bordered)
-                    .disabled(isSaveDisabled)
-                }
-                .padding(.horizontal)
 
-                Spacer()
+                    HStack(spacing: 12) {
+                        Button {
+                            Haptics.tap()
+                            save(mode: .smart)
+                        } label: {
+                            Text("Save")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(isSaveDisabled)
+
+                        Button {
+                            Haptics.tap()
+                            save(mode: .inboxOnly)
+                        } label: {
+                            Text("Inbox only")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(isSaveDisabled)
+                    }
+                    .padding(.horizontal)
+                    .tint(.appAccent)
+
+                    Spacer()
+                }
             }
-            // Tap anywhere outside fields to dismiss keyboard
             .contentShape(Rectangle())
             .onTapGesture {
                 isTextFocused = false
@@ -106,18 +122,19 @@ struct QuickAddView: View {
             .navigationTitle("Capture")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                // Escape hatch (no-save exit)
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel") {
+                        Haptics.tap()
                         clearAndDismiss()
                     }
                 }
 
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Close") { dismiss() }
+                    Button("Close") {
+                        Haptics.tap()
+                        dismiss() }
                 }
 
-                // Keyboard toolbar
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
                     Button("Done") {
@@ -126,8 +143,8 @@ struct QuickAddView: View {
                     }
                 }
             }
+            .tint(.appAccent)
             .onAppear {
-                // Focus the main field on open
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                     isTextFocused = true
                 }
@@ -140,8 +157,8 @@ struct QuickAddView: View {
     }
 
     private enum SaveMode {
-        case smart       // schedule if time detected
-        case inboxOnly   // never schedule
+        case smart
+        case inboxOnly
     }
 
     private func resolvedStartStep(parsedStartStep: String) -> String {
@@ -151,7 +168,6 @@ struct QuickAddView: View {
     }
 
     private func clearAndDismiss() {
-        // Clear input so Cancel feels emotionally safe (nothing saved)
         text = ""
         startStepText = ""
         showFirstStep = false
@@ -204,8 +220,10 @@ struct QuickAddView: View {
             context.insert(FocusDumpItem(text: payload, sessionId: active.id))
             do {
                 try context.save()
+                Haptics.success()
                 resetStateAndDismiss()
             } catch {
+                Haptics.error()
                 lastErrorMessage = "Couldn’t save. Try again."
                 print("❌ Save failed (FocusDump):", error)
             }
@@ -214,13 +232,10 @@ struct QuickAddView: View {
         }
 
         // Parse input
-        // If your CaptureParser requires 'now:', use the now version below.
-        // let parsed = parser.parse(trimmedText, profile: profile, now: .now)
         let parsed = parser.parse(trimmedText, profile: profile)
-
         let startStepToUse = resolvedStartStep(parsedStartStep: parsed.startStep)
 
-        // Inbox-only mode: always create InboxItem
+        // Inbox-only mode
         if mode == .inboxOnly {
             let inbox = InboxItem(
                 content: trimmedText,
@@ -233,8 +248,10 @@ struct QuickAddView: View {
 
             do {
                 try context.save()
+                Haptics.success()
                 resetStateAndDismiss()
             } catch {
+                Haptics.error()
                 lastErrorMessage = "Couldn’t save to Inbox. Try again."
                 print("❌ Save failed (InboxOnly):", error)
             }
@@ -255,7 +272,9 @@ struct QuickAddView: View {
 
             do {
                 try context.save()
+                Haptics.success()
             } catch {
+                Haptics.error()
                 lastErrorMessage = "Couldn’t schedule. Try again."
                 print("❌ Save failed (Reminder):", error)
                 isSaving = false
@@ -277,7 +296,6 @@ struct QuickAddView: View {
                         scheduledAt: reminder.scheduledAt
                     )
                 } catch {
-                    // Not fatal; reminder still exists in SwiftData.
                     print("❌ Notification schedule failed:", error)
                 }
             }
@@ -295,8 +313,10 @@ struct QuickAddView: View {
 
             do {
                 try context.save()
+                Haptics.success()
                 resetStateAndDismiss()
             } catch {
+                Haptics.error()
                 lastErrorMessage = "Couldn’t save to Inbox. Try again."
                 print("❌ Save failed (Inbox):", error)
             }

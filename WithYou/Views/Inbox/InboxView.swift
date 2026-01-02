@@ -17,38 +17,46 @@ struct InboxView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                if items.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Inbox is empty")
-                            .font(.headline)
+            ZStack {
+                Color.appBackground.ignoresSafeArea()
 
-                        Text("Captured thoughts land here when there’s no time yet.")
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.vertical, 12)
-                    .listRowSeparator(.hidden)
-                } else {
-                    ForEach(items) { item in
-                        NavigationLink {
-                            InboxDetailView(item: item)
-                        } label: {
-                            InboxRow(item: item)
-                        }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            Button(role: .destructive) {
-                                itemPendingDeletion = item
+                List {
+                    if items.isEmpty {
+                        emptyStateRow
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.appBackground)
+                    } else {
+                        ForEach(items) { item in
+                            NavigationLink {
+                                InboxDetailView(item: item)
                             } label: {
-                                Label("Not needed", systemImage: "trash")
+                                InboxRow(item: item)
+                            }
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.appBackground)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button(role: .destructive) {
+                                    Haptics.tap()
+                                    itemPendingDeletion = item
+                                } label: {
+                                    Label("Not needed", systemImage: "trash")
+                                }
                             }
                         }
                     }
                 }
+                .environment(\.defaultMinListRowHeight, 44)
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                .background(Color.appBackground)
             }
             .navigationTitle("Inbox")
+            .navigationBarTitleDisplayMode(.inline)
+            .tint(.appAccent)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
+                        Haptics.tap()
                         showQuickAdd = true
                     } label: {
                         Image(systemName: "plus")
@@ -58,6 +66,7 @@ struct InboxView: View {
             }
             .sheet(isPresented: $showQuickAdd) {
                 QuickAddView()
+                    .presentationBackground(Color.appBackground)
             }
             .confirmationDialog(
                 "Let this go?",
@@ -80,11 +89,26 @@ struct InboxView: View {
         }
     }
 
+    private var emptyStateRow: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Inbox is empty")
+                .font(.headline)
+                .foregroundStyle(.appPrimaryText)
+
+            Text("Captured thoughts land here when there’s no time yet.")
+                .foregroundStyle(.appSecondaryText)
+        }
+        .padding(.vertical, 12)
+        .padding(.horizontal, 6)
+    }
+
     private func delete(_ item: InboxItem) {
         context.delete(item)
         do {
             try context.save()
+            Haptics.success()
         } catch {
+            Haptics.error()
             print("❌ Save failed (delete):", error)
         }
     }
@@ -94,14 +118,25 @@ private struct InboxRow: View {
     let item: InboxItem
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             Text(item.title)
                 .font(.headline)
+                .foregroundStyle(.appPrimaryText)
 
             Text("Start: \(item.startStep) (\(item.estimateMinutes) min)")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.appSecondaryText)
                 .lineLimit(2)
         }
-        .padding(.vertical, 6)
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(.appSurface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(.appHairline.opacity(0.10), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.03), radius: 8, x: 0, y: 4)
+        .padding(.vertical, 1)
     }
 }

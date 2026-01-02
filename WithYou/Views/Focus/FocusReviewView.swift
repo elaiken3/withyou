@@ -30,43 +30,83 @@ struct FocusReviewView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Nice work.").font(.largeTitle).bold()
-                Text("Here’s what you offloaded.")
-                    .foregroundStyle(.secondary)
+            ZStack {
+                Color.appBackground.ignoresSafeArea()
 
-                if dumpItems.isEmpty {
-                    Text("Nothing to process. You’re done.")
-                        .foregroundStyle(.secondary)
-                } else {
-                    List {
-                        ForEach(dumpItems) { item in
-                            VStack(alignment: .leading, spacing: 10) {
-                                Text(item.text).font(.headline)
-                                HStack {
-                                    Button("Schedule") { scheduleTomorrowMorning(item) }
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Nice work.")
+                        .font(.largeTitle).bold()
+                        .foregroundStyle(.appPrimaryText)
+
+                    Text("Here’s what you offloaded.")
+                        .foregroundStyle(.appSecondaryText)
+
+                    if dumpItems.isEmpty {
+                        Text("Nothing to process. You’re done.")
+                            .foregroundStyle(.appSecondaryText)
+                    } else {
+                        List {
+                            ForEach(dumpItems) { item in
+                                VStack(alignment: .leading, spacing: 10) {
+                                    Text(item.text)
+                                        .font(.headline)
+                                        .foregroundStyle(.appPrimaryText)
+
+                                    HStack {
+                                        Button("Schedule") {
+                                            Haptics.tap()
+                                            scheduleTomorrowMorning(item)
+                                        }
                                         .buttonStyle(.borderedProminent)
-                                    Button("Inbox") { sendToInbox(item) }
-                                        .buttonStyle(.bordered)
-                                    Button("Not needed") {
-                                        context.delete(item); try? context.save()
-                                    }
-                                    .buttonStyle(.bordered)
-                                }
-                            }
-                            .padding(.vertical, 6)
-                        }
-                    }
-                }
 
-                Button("Return to Today") { onDone() }
+                                        Button("Inbox") {
+                                            Haptics.tap()
+                                            sendToInbox(item)
+                                        }
+                                        .buttonStyle(.bordered)
+
+                                        Button("Not needed") {
+                                            Haptics.tap()
+                                            context.delete(item)
+                                            do {
+                                                try context.save()
+                                                Haptics.success()
+                                            } catch {
+                                                Haptics.error()
+                                                print("❌ Save failed (reviewNotNeeded):", error)
+                                            }
+                                        }
+                                        .buttonStyle(.bordered)
+                                    }
+                                }
+                                .padding(.vertical, 6)
+                                .listRowBackground(Color.appSurface)
+                            }
+                        }
+                        .scrollContentBackground(.hidden)
+                        .background(Color.appSurface)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .stroke(.appHairline.opacity(0.10), lineWidth: 1)
+                        )
+                    }
+
+                    Button("Return to Today") {
+                        Haptics.tap()
+                        onDone()
+                    }
                     .buttonStyle(.borderedProminent)
+                    .tint(.appAccent)
                     .padding(.top, 8)
 
-                Spacer()
+                    Spacer()
+                }
+                .padding()
             }
-            .padding()
             .navigationTitle("Wrap up")
+            .navigationBarTitleDisplayMode(.inline)
+            .tint(.appAccent)
         }
     }
 
@@ -74,10 +114,24 @@ struct FocusReviewView: View {
         let profile = ProfileStore.activeProfile(in: context)
         let parsed = parser.parse(item.text, profile: profile)
 
-        let inbox = InboxItem(content: item.text, title: parsed.title, source: .app, startStep: parsed.startStep, estimateMinutes: parsed.estimateMinutes)
+        let inbox = InboxItem(
+            content: item.text,
+            title: parsed.title,
+            source: .app,
+            startStep: parsed.startStep,
+            estimateMinutes: parsed.estimateMinutes
+        )
+
         context.insert(inbox)
         context.delete(item)
-        try? context.save()
+
+        do {
+            try context.save()
+            Haptics.success()
+        } catch {
+            Haptics.error()
+            print("❌ Save failed (sendToInbox):", error)
+        }
     }
 
     private func scheduleTomorrowMorning(_ item: FocusDumpItem) {
@@ -85,15 +139,33 @@ struct FocusReviewView: View {
         let parsed = parser.parse(item.text, profile: profile)
 
         let when = tomorrowMorning(profile: profile)
-        let reminder = VerboseReminder(title: parsed.title, startStep: parsed.startStep, estimateMinutes: parsed.estimateMinutes, scheduledAt: when)
+        let reminder = VerboseReminder(
+            title: parsed.title,
+            startStep: parsed.startStep,
+            estimateMinutes: parsed.estimateMinutes,
+            scheduledAt: when
+        )
 
         context.insert(reminder)
         context.delete(item)
-        try? context.save()
+
+        do {
+            try context.save()
+            Haptics.success()
+        } catch {
+            Haptics.error()
+            print("❌ Save failed (scheduleTomorrowMorning):", error)
+            return
+        }
 
         Task {
             let body = "Start: \(reminder.startStep) (\(reminder.estimateMinutes) min)\nTap “Help me start” if you’re stuck."
-            try? await NotificationManager.shared.scheduleReminder(id: reminder.id, title: reminder.title, body: body, scheduledAt: reminder.scheduledAt)
+            try? await NotificationManager.shared.scheduleReminder(
+                id: reminder.id,
+                title: reminder.title,
+                body: body,
+                scheduledAt: reminder.scheduledAt
+            )
         }
     }
 
@@ -106,4 +178,3 @@ struct FocusReviewView: View {
         return Calendar.current.date(from: comps) ?? tomorrow
     }
 }
-

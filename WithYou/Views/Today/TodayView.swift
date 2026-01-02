@@ -30,166 +30,182 @@ struct TodayView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+            ZStack {
+                Color.appBackground.ignoresSafeArea()
 
-                    // STILL RELEVANT (missed reminder, neutral)
-                    if let missed = missedReminder {
-                        TodayCard(
-                            title: "Still relevant?",
-                            subtitle: "You didn’t do this at the scheduled time — no problem."
-                        ) {
-                            Button("Today") { rescheduleMissedToToday(missed) }
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+
+                        // STILL RELEVANT (missed reminder, neutral)
+                        if let missed = missedReminder {
+                            TodayCard(
+                                title: "Still relevant?",
+                                subtitle: "You didn’t do this at the scheduled time — no problem."
+                            ) {
+                                Button("Today") { rescheduleMissedToToday(missed) }
+                                    .buttonStyle(.borderedProminent)
+
+                                Button("Later") { showRescheduleForReminder = missed }
+                                    .buttonStyle(.bordered)
+
+                                Button("Not needed") { dismissMissedReminder(missed) }
+                                    .buttonStyle(.bordered)
+                            }
+                            .padding(.horizontal)
+                        }
+
+                        // RIGHT NOW (one card)
+                        Text("Right now")
+                            .font(.headline)
+                            .foregroundStyle(.appPrimaryText)
+                            .padding(.horizontal)
+
+                        if let active = activeFocusSession {
+                            TodayCard(
+                                title: "You’re in a focus session",
+                                subtitle: "Focusing on: \(active.focusTitle). Want to keep going?"
+                            ) {
+                                Button("Resume focus") {
+                                    selectedTab = .focus
+                                }
                                 .buttonStyle(.borderedProminent)
 
-                            Button("Later") { showRescheduleForReminder = missed }
-                                .buttonStyle(.bordered)
-
-                            Button("Not needed") { dismissMissedReminder(missed) }
-                                .buttonStyle(.bordered)
-                        }
-                        .padding(.horizontal)
-                    }
-
-                    // RIGHT NOW (one card)
-                    Text("Right now")
-                        .font(.headline)
-                        .padding(.horizontal)
-
-                    if let active = activeFocusSession {
-                        TodayCard(
-                            title: "You’re in a focus session",
-                            subtitle: "Focusing on: \(active.focusTitle). Want to keep going?"
-                        ) {
-                            Button("Resume focus") {
-                                selectedTab = .focus
+                                Button("Refocus (30 sec)") {
+                                    Haptics.tap()
+                                    showRefocus = true }
+                                    .buttonStyle(.bordered)
                             }
-                            .buttonStyle(.borderedProminent)
-
-                            Button("Refocus (30 sec)") { showRefocus = true }
-                                .buttonStyle(.bordered)
-                        }
-                        .padding(.horizontal)
-
-                    } else if let next = nextReminderToday {
-                        TodayTaskCard(
-                            title: next.title,
-                            startStep: next.startStep,
-                            estimateMinutes: next.estimateMinutes,
-                            primaryButtonTitle: "Start a focus session",
-                            secondaryButtonTitle: "Not now"
-                        ) {
-                            startFocusSession(title: next.title, startStep: next.startStep)
-                        } secondaryAction: {
-                            // Gentle: no punishment, no overdue
-                            toast("No problem. It can wait.")
-                        }
-                        .padding(.horizontal)
-
-                    } else if let tiny = nextTinyInboxItem {
-                        TodayTaskCard(
-                            title: tiny.title,
-                            startStep: tiny.startStep,
-                            estimateMinutes: tiny.estimateMinutes,
-                            primaryButtonTitle: "Do the first step (2 min)",
-                            secondaryButtonTitle: "Make it smaller"
-                        ) {
-                            // “Do the first step” = start a short focus session
-                            startFocusSession(title: tiny.title, startStep: tiny.startStep)
-                        } secondaryAction: {
-                            makeInboxItemSmaller(tiny)
-                        }
-                        .padding(.horizontal)
-
-                    } else {
-                        TodayEmptyCard()
                             .padding(.horizontal)
-                    }
 
-                    // OPTIONAL SECTION
-                    Text("If you have energy")
-                        .font(.headline)
-                        .padding(.horizontal)
-
-                    if let suggestion = secondarySuggestionInboxItem {
-                        SuggestionRow(
-                            title: suggestion.title,
-                            subtitle: "Start: \(suggestion.startStep) (\(suggestion.estimateMinutes) min)",
-                            primaryTitle: "Schedule",
-                            secondaryTitle: "Not needed"
-                        ) {
-                            showScheduleForInboxItem = suggestion
-                        } secondary: {
-                            deleteInboxItem(suggestion)
-                        }
-                        .padding(.horizontal)
-                    } else {
-                        Text("Nothing extra needed today.")
-                            .foregroundStyle(.secondary)
+                        } else if let next = nextReminderToday {
+                            TodayTaskCard(
+                                title: next.title,
+                                startStep: next.startStep,
+                                estimateMinutes: next.estimateMinutes,
+                                primaryButtonTitle: "Start a focus session",
+                                secondaryButtonTitle: "Not now"
+                            ) {
+                                startFocusSession(title: next.title, startStep: next.startStep)
+                            } secondaryAction: {
+                                Haptics.tap()
+                                toast("No problem. It can wait.")
+                            }
                             .padding(.horizontal)
-                    }
 
-                    // SUPPORT
-                    Text("Reset")
-                        .font(.headline)
+                        } else if let tiny = nextTinyInboxItem {
+                            TodayTaskCard(
+                                title: tiny.title,
+                                startStep: tiny.startStep,
+                                estimateMinutes: tiny.estimateMinutes,
+                                primaryButtonTitle: "Do the first step (2 min)",
+                                secondaryButtonTitle: "Make it smaller"
+                            ) {
+                                startFocusSession(title: tiny.title, startStep: tiny.startStep)
+                            } secondaryAction: {
+                                Haptics.tap()
+                                makeInboxItemSmaller(tiny)
+                            }
+                            .padding(.horizontal)
+
+                        } else {
+                            TodayEmptyCard()
+                                .padding(.horizontal)
+                        }
+
+                        // OPTIONAL SECTION
+                        Text("If you have energy")
+                            .font(.headline)
+                            .foregroundStyle(.appPrimaryText)
+                            .padding(.horizontal)
+
+                        if let suggestion = secondarySuggestionInboxItem {
+                            SuggestionRow(
+                                title: suggestion.title,
+                                subtitle: "Start: \(suggestion.startStep) (\(suggestion.estimateMinutes) min)",
+                                primaryTitle: "Schedule",
+                                secondaryTitle: "Not needed"
+                            ) {
+                                Haptics.tap()
+                                showScheduleForInboxItem = suggestion
+                            } secondary: {
+                                Haptics.tap()
+                                deleteInboxItem(suggestion)
+                            }
+                            .padding(.horizontal)
+                        } else {
+                            Text("Nothing extra needed today.")
+                                .foregroundStyle(.appSecondaryText)
+                                .padding(.horizontal)
+                        }
+
+                        // SUPPORT
+                        Text("Reset")
+                            .font(.headline)
+                            .foregroundStyle(.appPrimaryText)
+                            .padding(.horizontal)
+
+                        Button {
+                            Haptics.tap()
+                            showRefocus = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "wind")
+                                Text("Refocus (30 seconds)")
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .buttonStyle(.bordered)
                         .padding(.horizontal)
 
-                    Button {
-                        showRefocus = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "wind")
-                            Text("Refocus (30 seconds)")
+                        Button {
+                            Haptics.tap()
+                            showStuck = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "hand.raised")
+                                Text("I’m stuck")
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .buttonStyle(.bordered)
-                    .padding(.horizontal)
-                    
-                    Button {
-                        showStuck = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "hand.raised")
-                            Text("I’m stuck")
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .buttonStyle(.bordered)
-                    .padding(.horizontal)
+                        .buttonStyle(.bordered)
+                        .padding(.horizontal)
 
-                    // Gentle Inbox indicator (no guilt)
-                    if !inboxItems.isEmpty {
-                        Text("Inbox has \(inboxItems.count) item(s). You don’t need to clear it today.")
-                            .foregroundStyle(.secondary)
-                            .font(.footnote)
-                            .padding(.horizontal)
-                            .padding(.top, 4)
+                        // Gentle Inbox indicator (no guilt)
+                        if !inboxItems.isEmpty {
+                            Text("Inbox has \(inboxItems.count) item(s). You don’t need to clear it today.")
+                                .foregroundStyle(.appSecondaryText)
+                                .font(.footnote)
+                                .padding(.horizontal)
+                                .padding(.top, 4)
+                        }
                     }
+                    .padding(.vertical, 12)
                 }
-                .padding(.vertical, 12)
             }
             .navigationTitle("Today")
+            .navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $showRefocus) {
                 RefocusSheet()
             }
             .sheet(item: $showScheduleForInboxItem) { item in
-                ScheduleSheet(
+                ScheduleSheetV2(
                     title: item.title,
                     startStep: item.startStep,
                     estimate: item.estimateMinutes
                 ) { date in
                     convertInboxItemToReminder(item, date: date)
                 }
+                .presentationBackground(Color.appBackground)
             }
             .sheet(item: $showRescheduleForReminder) { reminder in
-                ScheduleSheet(
+                ScheduleSheetV2(
                     title: reminder.title,
                     startStep: reminder.startStep,
                     estimate: reminder.estimateMinutes
                 ) { date in
                     rescheduleReminder(reminder, to: date)
                 }
+                .presentationBackground(Color.appBackground)
             }
             .overlay(alignment: .bottom) {
                 if let toastMessage {
@@ -222,6 +238,7 @@ struct TodayView: View {
                     inboxItems: inboxItems
                 )
             }
+            .tint(.appAccent)
         }
     }
 
@@ -248,16 +265,13 @@ struct TodayView: View {
     }
 
     private var secondarySuggestionInboxItem: InboxItem? {
-        // Pick a different item than the “tiny” one if possible
         let tinyId = nextTinyInboxItem?.id
         return inboxItems.first(where: { $0.id != tinyId })
     }
 
-    // MARK: - Actions
+    // MARK: - Actions (UNCHANGED)
 
     private func startFocusSession(title: String, startStep: String? = nil) {
-        // v1: keep this simple and predictable.
-        // We'll default to 25 minutes unless the profile says otherwise later.
         let duration = 25 * 60
 
         let session = FocusSession(
@@ -274,9 +288,11 @@ struct TodayView: View {
 
         do {
             try context.save()
+            Haptics.success()
             selectedTab = .focus
             toast("Focus session started.")
         } catch {
+            Haptics.error()
             print("❌ Save failed (startFocusSession):", error)
             toast("Couldn’t start focus. Try again.")
         }
@@ -315,10 +331,13 @@ struct TodayView: View {
         )
         context.insert(reminder)
         context.delete(item)
+        Haptics.tap()
 
         do {
+            Haptics.success()
             try context.save()
         } catch {
+            Haptics.error()
             print("❌ Save failed (convertInboxItemToReminder):", error)
             toast("Couldn’t schedule that. Try again.")
             return
@@ -348,10 +367,13 @@ struct TodayView: View {
 
     private func rescheduleReminder(_ reminder: VerboseReminder, to date: Date) {
         reminder.scheduledAt = date
+        Haptics.tap()
 
         do {
+            Haptics.success()
             try context.save()
         } catch {
+            Haptics.error()
             print("❌ Save failed (rescheduleReminder):", error)
             toast("Couldn’t reschedule. Try again.")
             return
@@ -385,9 +407,8 @@ struct TodayView: View {
 
         let now = Date()
         let cal = Calendar.current
-        var target = now.addingTimeInterval(30 * 60) // fallback: 30 min from now
+        var target = now.addingTimeInterval(30 * 60)
 
-        // If today's evening default is still ahead, use that.
         if let p = profile {
             let startOfToday = cal.startOfDay(for: now)
             if let evening = cal.date(bySettingHour: p.eveningHour, minute: 0, second: 0, of: startOfToday),
@@ -397,10 +418,13 @@ struct TodayView: View {
         }
 
         reminder.scheduledAt = target
+        Haptics.tap()
 
         do {
+            Haptics.success()
             try context.save()
         } catch {
+            Haptics.error()
             print("❌ Save failed (rescheduleMissedToToday):", error)
             toast("Couldn’t reschedule. Try again.")
             return
@@ -451,7 +475,7 @@ struct TodayView: View {
     }
 }
 
-// MARK: - Small UI components
+// MARK: - Small UI components (updated styling only)
 
 private struct TodayTaskCard: View {
     let title: String
@@ -464,9 +488,12 @@ private struct TodayTaskCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title).font(.headline)
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(.appPrimaryText)
+
             Text("Start: \(startStep) (\(estimateMinutes) min)")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.appSecondaryText)
 
             HStack {
                 Button(primaryButtonTitle, action: primaryAction)
@@ -477,8 +504,15 @@ private struct TodayTaskCard: View {
             }
         }
         .padding(14)
-        .background(.thinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(.appSurface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(.appHairline.opacity(0.10), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.03), radius: 8, x: 0, y: 4)
     }
 }
 
@@ -489,13 +523,25 @@ private struct TodayCard<Actions: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title).font(.headline)
-            Text(subtitle).foregroundStyle(.secondary)
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(.appPrimaryText)
+
+            Text(subtitle)
+                .foregroundStyle(.appSecondaryText)
+
             actions()
         }
         .padding(14)
-        .background(.thinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(.appSurface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(.appHairline.opacity(0.10), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.03), radius: 8, x: 0, y: 4)
     }
 }
 
@@ -504,12 +550,21 @@ private struct TodayEmptyCard: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("You’re clear for now.")
                 .font(.headline)
+                .foregroundStyle(.appPrimaryText)
+
             Text("If something pops into your head, capture it — you don’t have to hold it.")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.appSecondaryText)
         }
         .padding(14)
-        .background(.thinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(.appSurface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(.appHairline.opacity(0.10), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.03), radius: 8, x: 0, y: 4)
     }
 }
 
@@ -523,8 +578,12 @@ private struct SuggestionRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title).font(.headline)
-            Text(subtitle).foregroundStyle(.secondary)
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(.appPrimaryText)
+
+            Text(subtitle)
+                .foregroundStyle(.appSecondaryText)
 
             HStack {
                 Button(primaryTitle, action: primary)
@@ -535,8 +594,15 @@ private struct SuggestionRow: View {
             }
         }
         .padding(14)
-        .background(.thinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(.appSurface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(.appHairline.opacity(0.10), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.03), radius: 8, x: 0, y: 4)
     }
 }
 
@@ -547,33 +613,40 @@ private struct RefocusSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 14) {
-                Text("Refocus")
-                    .font(.title2)
-                    .bold()
+            ZStack {
+                Color.appBackground.ignoresSafeArea()
 
-                Text("Breathe slowly. You’re safe. You can start small.")
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal)
+                VStack(spacing: 14) {
+                    Text("Refocus")
+                        .font(.title2)
+                        .bold()
+                        .foregroundStyle(.appPrimaryText)
 
-                Text("\(secondsRemaining)")
-                    .font(.system(size: 56, weight: .bold, design: .rounded))
-                    .padding(.top, 6)
+                    Text("Breathe slowly. You’re safe. You can start small.")
+                        .foregroundStyle(.appSecondaryText)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
 
-                Text("In… 2… 3… 4…  Out… 2… 3… 4…")
-                    .foregroundStyle(.secondary)
+                    Text("\(secondsRemaining)")
+                        .font(.system(size: 56, weight: .bold, design: .rounded))
+                        .foregroundStyle(.appPrimaryText)
+                        .padding(.top, 6)
 
-                Spacer()
+                    Text("In… 2… 3… 4…  Out… 2… 3… 4…")
+                        .foregroundStyle(.appSecondaryText)
 
-                Button("Done") {
-                    stopTimer()
-                    dismiss()
+                    Spacer()
+
+                    Button("Done") {
+                        stopTimer()
+                        dismiss()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.appAccent)
+                    .padding(.bottom)
                 }
-                .buttonStyle(.borderedProminent)
-                .padding(.bottom)
+                .padding()
             }
-            .padding()
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -583,6 +656,7 @@ private struct RefocusSheet: View {
                     }
                 }
             }
+            .tint(.appAccent)
             .onAppear { startTimer() }
             .onDisappear { stopTimer() }
         }
@@ -612,10 +686,18 @@ private struct ToastView: View {
     var body: some View {
         Text(text)
             .font(.footnote)
+            .foregroundStyle(.appPrimaryText)
             .padding(.vertical, 10)
             .padding(.horizontal, 12)
             .frame(maxWidth: .infinity)
-            .background(.thinMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(.appSurface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(.appHairline.opacity(0.10), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.04), radius: 10, x: 0, y: 4)
     }
 }

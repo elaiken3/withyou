@@ -12,6 +12,9 @@ struct RootView: View {
     @Environment(\.modelContext) private var context
     @State private var selectedTab: AppTab = .today
 
+    // Drives light/dark/system for the whole app UI
+    @State private var preferredScheme: ColorScheme? = nil
+
     var body: some View {
         TabView(selection: $selectedTab) {
             TodayView(selectedTab: $selectedTab)
@@ -34,9 +37,26 @@ struct RootView: View {
                 .tag(AppTab.capture)
                 .tabItem { Label("Capture", systemImage: "plus.circle.fill") }
         }
+        // ✅ Apply to the whole app UI
+        .preferredColorScheme(preferredScheme)
+        .onReceive(NotificationCenter.default.publisher(for: .appearancePreferenceChanged)) { _ in
+            refreshPreferredScheme()
+        }
         .onAppear {
             ProfileStore.ensureDefaultProfile(in: context)
             FocusSessionStore.normalizeActiveSessions(in: context)
+            refreshPreferredScheme()
         }
+        // ✅ Re-evaluate periodically when RootView becomes active again (covers “back from settings” cases)
+        .onChange(of: selectedTab) { _, _ in
+            refreshPreferredScheme()
+        }
+    }
+
+    private func refreshPreferredScheme() {
+        let profile = ProfileStore.activeProfile(in: context)
+
+        // If you implemented profile.colorSchemeRaw + AppColorScheme.preferred:
+        preferredScheme = profile?.colorScheme.preferred
     }
 }
