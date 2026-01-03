@@ -40,7 +40,7 @@ struct TodayView: View {
                         if let missed = missedReminder {
                             TodayCard(
                                 title: "Still relevant?",
-                                subtitle: "You didn’t do this at the scheduled time — no problem."
+                                subtitle: "“\(missed.title)” was scheduled for \(friendlyScheduledDateTime(missed.scheduledAt)). No problem if you missed it. Reschedule?"
                             ) {
                                 Button("Today") { rescheduleMissedToToday(missed) }
                                     .buttonStyle(.borderedProminent)
@@ -267,6 +267,27 @@ struct TodayView: View {
     private var secondarySuggestionInboxItem: InboxItem? {
         let tinyId = nextTinyInboxItem?.id
         return inboxItems.first(where: { $0.id != tinyId })
+    }
+    
+    private func friendlyScheduledDateTime(_ date: Date) -> String {
+        let calendar = Calendar.current
+
+        let datePart: String
+        if calendar.isDateInToday(date) {
+            datePart = "today"
+        } else if calendar.isDateInYesterday(date) {
+            datePart = "yesterday"
+        } else {
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "MMMM d" // March 12
+            datePart = dateFormatter.string(from: date)
+        }
+
+        let timeFormatter = DateFormatter()
+        timeFormatter.dateFormat = "h:mm a"
+        let timePart = timeFormatter.string(from: date).lowercased()
+
+        return "\(datePart) at \(timePart)"
     }
 
     // MARK: - Actions (UNCHANGED)
