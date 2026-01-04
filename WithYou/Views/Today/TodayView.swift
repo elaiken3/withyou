@@ -42,14 +42,23 @@ struct TodayView: View {
                                 title: "Still relevant?",
                                 subtitle: "“\(missed.title)” was scheduled for \(friendlyScheduledDateTime(missed.scheduledAt)). No problem if you missed it. Reschedule?"
                             ) {
-                                Button("Today") { rescheduleMissedToToday(missed) }
-                                    .buttonStyle(.borderedProminent)
+                                Button("Today") {
+                                    rescheduleMissedToToday(missed)
+                                }
+                                .buttonStyle(.borderedProminent)
 
-                                Button("Later") { showRescheduleForReminder = missed }
-                                    .buttonStyle(.bordered)
+                                Button("Later") {
+                                    missed.lastCheckedAt = Date()
+                                    try? context.save()
+                                    toast("We’ll check again later to see if there was anything else.")
+                                    showRescheduleForReminder = missed
+                                }
+                                .buttonStyle(.bordered)
 
-                                Button("Not needed") { dismissMissedReminder(missed) }
-                                    .buttonStyle(.bordered)
+                                Button("Not needed") {
+                                    dismissMissedReminder(missed)
+                                }
+                                .buttonStyle(.bordered)
                             }
                             .padding(.horizontal)
                         }
@@ -256,8 +265,20 @@ struct TodayView: View {
 
     /// One missed reminder (no backlog, no overdue)
     private var missedReminder: VerboseReminder? {
+        let cooldown: TimeInterval = 90 * 60 // 90 minutes
         let now = Date()
-        return reminders.first(where: { $0.scheduledAt < now })
+
+        let candidates = reminders.filter { r in
+            r.scheduledAt < now
+            && r.isDone == false
+            && (
+                r.lastCheckedAt == nil
+                || now.timeIntervalSince(r.lastCheckedAt!) > cooldown
+            )
+        }
+
+        // Most recently missed (latest scheduledAt in the past)
+        return candidates.max(by: { $0.scheduledAt < $1.scheduledAt })
     }
 
     private var nextTinyInboxItem: InboxItem? {
@@ -317,6 +338,16 @@ struct TodayView: View {
             print("❌ Save failed (startFocusSession):", error)
             toast("Couldn’t start focus. Try again.")
         }
+    }
+    
+    private func markMissedChecked(_ reminder: VerboseReminder) {
+        reminder.lastCheckedAt = Date()
+        do {
+            try context.save()
+        } catch {
+            print("❌ Save failed (markMissedChecked):", error)
+        }
+        toast("We’ll check again later to see if there was anything else.")
     }
 
     private func makeInboxItemSmaller(_ item: InboxItem) {
@@ -439,6 +470,7 @@ struct TodayView: View {
         }
 
         reminder.scheduledAt = target
+        reminder.lastCheckedAt = Date() // ✅ breathing cooldown starts now
         Haptics.tap()
 
         do {
@@ -450,6 +482,9 @@ struct TodayView: View {
             toast("Couldn’t reschedule. Try again.")
             return
         }
+
+        // ✅ Cancel old pending request and schedule the new one
+        NotificationManager.shared.cancelReminder(id: reminder.id)
 
         Task {
             let body =
@@ -470,14 +505,18 @@ struct TodayView: View {
             }
         }
 
-        toast("Rescheduled for today.")
+        toast("We’ll check again later to see if there was anything else.")
     }
 
+
     private func dismissMissedReminder(_ reminder: VerboseReminder) {
+        // ✅ Cancel any pending notification first
+        NotificationManager.shared.cancelReminder(id: reminder.id)
+
         context.delete(reminder)
         do {
             try context.save()
-            toast("Let go.")
+            toast("We’ll check again later to see if there was anything else.")
         } catch {
             print("❌ Save failed (dismissMissedReminder):", error)
             toast("Couldn’t remove it. Try again.")

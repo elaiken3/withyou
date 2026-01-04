@@ -54,6 +54,8 @@ final class VerboseReminder {
 
     var isStarted: Bool
     var isDone: Bool
+    
+    var lastCheckedAt: Date?
 
     init(title: String,
          why: String = "",
@@ -62,7 +64,9 @@ final class VerboseReminder {
          scheduledAt: Date,
          createdAt: Date = Date(),
          isStarted: Bool = false,
-         isDone: Bool = false)
+         isDone: Bool = false,
+         lastCheckedAt: Date? = nil
+    )
     {
         self.id = UUID()
         self.title = title
@@ -73,5 +77,6 @@ final class VerboseReminder {
         self.createdAt = createdAt
         self.isStarted = isStarted
         self.isDone = isDone
+        self.lastCheckedAt = lastCheckedAt
     }
 }

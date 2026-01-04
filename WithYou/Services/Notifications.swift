@@ -86,6 +86,11 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     func cancelFocusEnd(sessionId: UUID) {
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [focusEndNotificationId(sessionId: sessionId)])
     }
+    
+    func cancelReminder(id: UUID) {
+        UNUserNotificationCenter.current()
+            .removePendingNotificationRequests(withIdentifiers: [id.uuidString])
+    }
 
     private func focusEndNotificationId(sessionId: UUID) -> String {
         "focus_end_\(sessionId.uuidString)"
