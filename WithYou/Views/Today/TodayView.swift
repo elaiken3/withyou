@@ -667,76 +667,8 @@ private struct SuggestionRow: View {
 }
 
 private struct RefocusSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    @State private var secondsRemaining: Int = 30
-    @State private var timer: Timer?
-
     var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.appBackground.ignoresSafeArea()
-
-                VStack(spacing: 14) {
-                    Text("Refocus")
-                        .font(.title2)
-                        .bold()
-                        .foregroundStyle(.appPrimaryText)
-
-                    Text("Breathe slowly. You’re safe. You can start small.")
-                        .foregroundStyle(.appSecondaryText)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-
-                    Text("\(secondsRemaining)")
-                        .font(.system(size: 56, weight: .bold, design: .rounded))
-                        .foregroundStyle(.appPrimaryText)
-                        .padding(.top, 6)
-
-                    Text("In… 2… 3… 4…  Out… 2… 3… 4…")
-                        .foregroundStyle(.appSecondaryText)
-
-                    Spacer()
-
-                    Button("Done") {
-                        stopTimer()
-                        dismiss()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.appAccent)
-                    .padding(.bottom)
-                }
-                .padding()
-            }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Close") {
-                        stopTimer()
-                        dismiss()
-                    }
-                }
-            }
-            .tint(.appAccent)
-            .onAppear { startTimer() }
-            .onDisappear { stopTimer() }
-        }
-    }
-
-    private func startTimer() {
-        stopTimer()
-        secondsRemaining = 30
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-            if secondsRemaining > 0 {
-                secondsRemaining -= 1
-            } else {
-                stopTimer()
-            }
-        }
-    }
-
-    private func stopTimer() {
-        timer?.invalidate()
-        timer = nil
+        RefocusView()
     }
 }
 
