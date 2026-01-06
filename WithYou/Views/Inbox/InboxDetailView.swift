@@ -17,6 +17,7 @@ struct InboxDetailView: View {
     @State private var showSchedule = false
     @State private var isDeleting = false
     @State private var confirmNotNeeded = false
+    @State private var showEdit = false
 
     var body: some View {
         ZStack {
@@ -83,6 +84,13 @@ struct InboxDetailView: View {
         }
         .navigationTitle("Inbox Item")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Edit") {
+                    showEdit = true
+                }
+            }
+        }
         .tint(.appAccent)
         .sheet(isPresented: $showSchedule) {
             ScheduleSheetV2(
@@ -93,6 +101,9 @@ struct InboxDetailView: View {
                 schedule(date: date)
             }
             .presentationBackground(Color.appBackground)
+        }
+        .sheet(isPresented: $showEdit) {
+            EditInboxItemSheet(item: item)
         }
         .confirmationDialog(
             "Let this go?",
