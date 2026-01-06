@@ -10,90 +10,180 @@ import SwiftData
 
 struct ScheduleView: View {
     @Environment(\.modelContext) private var context
+    @Query(sort: \VerboseReminder.scheduledAt, order: .forward) private var reminders: [VerboseReminder]
 
-    @Query(sort: \VerboseReminder.scheduledAt, order: .forward)
-    private var reminders: [VerboseReminder]
+    @State private var editingReminder: VerboseReminder?
+    @State private var reminderPendingDeletion: VerboseReminder?
 
     var body: some View {
         NavigationStack {
-            List {
-                if upcoming.isEmpty {
-                    Section {
-                        Text("Nothing scheduled yet.")
-                            .foregroundStyle(.secondary)
-                    }
+            ZStack {
+                Color.appBackground.ignoresSafeArea()
+
+                if groupedReminders.isEmpty {
+                    emptyState
                 } else {
-                    ForEach(groupedDays, id: \.day) { group in
-                        Section(header: Text(sectionTitle(for: group.day))) {
-                            ForEach(group.items) { r in
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Text(r.title)
-                                        .font(.headline)
+                    List {
+                        ForEach(groupedReminders, id: \.dayKey) { section in
+                            Section(section.headerTitle) {
+                                ForEach(section.items) { reminder in
+                                    ScheduleRow(reminder: reminder)
+                                        .contentShape(Rectangle()) // tap anywhere
+                                        .onTapGesture {
+                                            Haptics.tap()
+                                            editingReminder = reminder
+                                        }
+                                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                            Button {
+                                                Haptics.tap()
+                                                editingReminder = reminder
+                                            } label: {
+                                                Label("Reschedule", systemImage: "calendar")
+                                            }
 
-                                    if !r.startStep.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                        Text("Start: \(r.startStep)")
-                                            .foregroundStyle(.secondary)
-                                    }
-
-                                    // Shows both date + time in a nice localized format
-                                    Text(r.scheduledAt, format: .dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute())
-                                        .font(.footnote)
-                                        .foregroundStyle(.secondary)
+                                            Button(role: .destructive) {
+                                                Haptics.tap()
+                                                reminderPendingDeletion = reminder
+                                            } label: {
+                                                Label("Not needed", systemImage: "trash")
+                                            }
+                                        }
                                 }
-                                .padding(.vertical, 6)
-                            }
-                            .onDelete { offsets in
-                                delete(offsets, in: group.items)
                             }
                         }
                     }
+                    .scrollContentBackground(.hidden)
+                    .background(Color.appBackground)
                 }
             }
             .navigationTitle("Schedule")
+            .navigationBarTitleDisplayMode(.inline)
+
+            // Edit / reschedule sheet (uses your existing file)
+            .sheet(item: $editingReminder) { reminder in
+                EditReminderSheet(reminder: reminder)
+                    .presentationBackground(Color.appBackground)
+            }
+
+            // Not needed confirmation
+            .confirmationDialog(
+                "Let this go?",
+                isPresented: .constant(reminderPendingDeletion != nil),
+                presenting: reminderPendingDeletion
+            ) { reminder in
+                Button("Let go", role: .destructive) {
+                    delete(reminder)
+                    reminderPendingDeletion = nil
+                }
+                Button("Keep", role: .cancel) {
+                    reminderPendingDeletion = nil
+                }
+            } message: { _ in
+                Text("You don’t have to do everything.")
+            }
+            .tint(.appAccent)
         }
     }
 
-    // MARK: - Data
+    // MARK: - Empty state
 
-    private var upcoming: [VerboseReminder] {
-        let now = Date()
-        return reminders.filter { $0.scheduledAt >= now }
+    private var emptyState: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Nothing scheduled yet.")
+                .font(.headline)
+                .foregroundStyle(.appPrimaryText)
+
+            Text("When you schedule something, it’ll show up here — date and time included.")
+                .foregroundStyle(.appSecondaryText)
+        }
+        .padding()
     }
 
-    private struct DayGroup {
-        let day: Date            // startOfDay
+    // MARK: - Grouping
+
+    private struct DaySection {
+        let dayKey: Date
+        let headerTitle: String
         let items: [VerboseReminder]
     }
 
-    private var groupedDays: [DayGroup] {
+    private var groupedReminders: [DaySection] {
         let cal = Calendar.current
-        let grouped = Dictionary(grouping: upcoming) { cal.startOfDay(for: $0.scheduledAt) }
+        let now = Date()
 
-        return grouped
-            .map { DayGroup(day: $0.key, items: $0.value.sorted(by: { $0.scheduledAt < $1.scheduledAt })) }
-            .sorted(by: { $0.day < $1.day })
-    }
+        let upcoming = reminders
+            .filter { !$0.isDone } // keep it simple; remove if you want to show done
+            .sorted { $0.scheduledAt < $1.scheduledAt }
 
-    // MARK: - UI helpers
+        let grouped = Dictionary(grouping: upcoming) { r in
+            cal.startOfDay(for: r.scheduledAt)
+        }
 
-    private func sectionTitle(for day: Date) -> String {
-        let cal = Calendar.current
-        if cal.isDateInToday(day) { return "Today" }
-        if cal.isDateInTomorrow(day) { return "Tomorrow" }
+        let dayKeys = grouped.keys.sorted()
 
-        return day.formatted(.dateTime.weekday(.wide).month(.wide).day())
+        return dayKeys.map { day in
+            let header: String
+            if cal.isDateInToday(day) {
+                header = "Today"
+            } else if cal.isDateInTomorrow(day) {
+                header = "Tomorrow"
+            } else if cal.isDate(day, equalTo: now, toGranularity: .year) {
+                let f = DateFormatter()
+                f.dateFormat = "EEEE, MMM d" // Tue, Jan 6
+                header = f.string(from: day)
+            } else {
+                let f = DateFormatter()
+                f.dateFormat = "EEEE, MMM d, yyyy"
+                header = f.string(from: day)
+            }
+
+            let items = (grouped[day] ?? []).sorted { $0.scheduledAt < $1.scheduledAt }
+            return DaySection(dayKey: day, headerTitle: header, items: items)
+        }
     }
 
     // MARK: - Actions
 
-    private func delete(_ offsets: IndexSet, in items: [VerboseReminder]) {
-        for idx in offsets {
-            let r = items[idx]
-            context.delete(r)
+    private func delete(_ reminder: VerboseReminder) {
+        // Cancel pending notif (if you have this helper)
+        NotificationManager.shared.cancelReminder(id: reminder.id)
 
-            // Optional: if you later add cancellation support:
-            // NotificationManager.shared.cancelReminder(id: r.id)
+        context.delete(reminder)
+        do {
+            try context.save()
+            Haptics.success()
+        } catch {
+            Haptics.error()
+            print("❌ Save failed (delete reminder):", error)
         }
-        try? context.save()
+    }
+}
+
+// MARK: - Row UI
+
+private struct ScheduleRow: View {
+    let reminder: VerboseReminder
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(reminder.title)
+                .font(.headline)
+                .foregroundStyle(.appPrimaryText)
+
+            Text("Start: \(reminder.startStep) (\(reminder.estimateMinutes) min)")
+                .foregroundStyle(.appSecondaryText)
+                .lineLimit(2)
+
+            Text(timeString(reminder.scheduledAt))
+                .font(.footnote)
+                .foregroundStyle(.appSecondaryText)
+        }
+        .padding(.vertical, 6)
+    }
+
+    private func timeString(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "h:mm a"
+        return f.string(from: date).lowercased()
     }
 }

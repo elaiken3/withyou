@@ -27,6 +27,8 @@ struct TodayView: View {
     @State private var showProfiles = false
     @State private var showRescheduleForReminder: VerboseReminder?
     @State private var showStuck = false
+    @State private var editingReminder: VerboseReminder?
+    @State private var editingInboxItem: InboxItem?
 
     var body: some View {
         NavigationStack {
@@ -48,10 +50,7 @@ struct TodayView: View {
                                 .buttonStyle(.borderedProminent)
 
                                 Button("Later") {
-                                    missed.lastCheckedAt = Date()
-                                    try? context.save()
-                                    toast("We’ll check again later to see if there was anything else.")
-                                    showRescheduleForReminder = missed
+                                    markMissedChecked(missed) // sets lastCheckedAt + toast
                                 }
                                 .buttonStyle(.bordered)
 
@@ -61,6 +60,11 @@ struct TodayView: View {
                                 .buttonStyle(.bordered)
                             }
                             .padding(.horizontal)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                Haptics.tap()
+                                editingReminder = missed
+                            }
                         }
 
                         // RIGHT NOW (one card)
@@ -100,6 +104,11 @@ struct TodayView: View {
                                 toast("No problem. It can wait.")
                             }
                             .padding(.horizontal)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                Haptics.tap()
+                                editingReminder = next
+                            }
 
                         } else if let tiny = nextTinyInboxItem {
                             TodayTaskCard(
@@ -115,6 +124,11 @@ struct TodayView: View {
                                 makeInboxItemSmaller(tiny)
                             }
                             .padding(.horizontal)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                Haptics.tap()
+                                editingInboxItem = tiny
+                            }
 
                         } else {
                             TodayEmptyCard()
@@ -141,6 +155,11 @@ struct TodayView: View {
                                 deleteInboxItem(suggestion)
                             }
                             .padding(.horizontal)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                Haptics.tap()
+                                editingInboxItem = suggestion
+                            }
                         } else {
                             Text("Nothing extra needed today.")
                                 .foregroundStyle(.appSecondaryText)
@@ -235,6 +254,14 @@ struct TodayView: View {
                         Image(systemName: "gearshape")
                     }
                 }
+            }
+            .sheet(item: $editingInboxItem) { item in
+                EditInboxItemSheet(item: item)
+                    .presentationBackground(Color.appBackground)
+            }
+            .sheet(item: $editingReminder) { reminder in
+                EditReminderSheet(reminder: reminder)
+                    .presentationBackground(Color.appBackground)
             }
             .sheet(isPresented: $showProfiles) {
                 NavigationStack { ProfilesView() }
