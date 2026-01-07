@@ -28,10 +28,10 @@ struct EditInboxItemSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("What is this?") {
+                Section("Captured") {
                     TextField("Title", text: $title)
                 }
-
+                
                 Section("First step") {
                     TextField("Start step", text: $startStep)
                 }
@@ -43,24 +43,26 @@ struct EditInboxItemSheet: View {
             .navigationTitle("Edit")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        save()
-                    }
+                    Button("Save") { save() }
                 }
-
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
+            }
+            .onAppear {
+                title = item.title
+                startStep = item.startStep
+                estimate = item.estimateMinutes
             }
         }
     }
 
     private func save() {
-        item.title = title
-        item.startStep = startStep
+        item.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        item.startStep = startStep.trimmingCharacters(in: .whitespacesAndNewlines)
         item.estimateMinutes = estimate
 
-        try? context.save()
+        do { try context.save() } catch { return }
         dismiss()
     }
 }
