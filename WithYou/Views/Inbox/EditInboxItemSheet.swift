@@ -43,14 +43,16 @@ struct EditInboxItemSheet: View {
             .navigationTitle("Edit")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        save()
-                    }
+                    Button("Save") { save() }
                 }
-
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
+            }
+            .onAppear {
+                title = item.title
+                startStep = item.startStep
+                estimate = item.estimateMinutes
             }
         }
     }
