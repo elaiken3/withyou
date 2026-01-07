@@ -30,9 +30,6 @@ struct InboxDetailView: View {
                             .font(.headline)
                             .foregroundStyle(.appPrimaryText)
 
-                        Text(item.content)
-                            .foregroundStyle(.appSecondaryText)
-
                         Text("Start: \(item.startStep) (\(item.estimateMinutes) min)")
                             .foregroundStyle(.appSecondaryText)
                     }
