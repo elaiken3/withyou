@@ -58,6 +58,19 @@ struct FocusSessionFlowView: View {
             }
             .tint(.appAccent)
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") {
+                        UIApplication.shared.sendAction(
+                            #selector(UIResponder.resignFirstResponder),
+                            to: nil,
+                            from: nil,
+                            for: nil
+                        )
+                    }
+                }
+            }
         }
         .onAppear {
             ProfileStore.ensureDefaultProfile(in: context)
@@ -162,6 +175,7 @@ struct FocusSessionFlowView: View {
             }
             .padding()
         }
+        .dismissKeyboardOnTap()
         .navigationTitle("Focus")
     }
 
