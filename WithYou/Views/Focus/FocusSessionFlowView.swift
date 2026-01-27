@@ -10,6 +10,7 @@ import SwiftData
 
 struct FocusSessionFlowView: View {
     @Environment(\.modelContext) private var context
+    @Binding var selectedTab: AppTab
     @State private var step: Step = .setup
 
     @State private var focusTitle: String = ""
@@ -28,6 +29,10 @@ struct FocusSessionFlowView: View {
     @State private var presets: [FocusDurationPreset] = []
 
     enum Step { case setup, dump, running, review }
+    
+    init(selectedTab: Binding<AppTab>) {
+        self._selectedTab = selectedTab
+    }
 
     var body: some View {
         NavigationStack {
@@ -50,6 +55,7 @@ struct FocusSessionFlowView: View {
                         FocusReviewView(session: s) {
                             step = .setup
                             session = nil
+                            selectedTab = .today
                         }
                     } else {
                         setupView

@@ -206,6 +206,21 @@ struct TodayView: View {
                                 .padding(.horizontal)
                                 .padding(.top, 4)
                         }
+                        if !completedFocusSessionsToday.isEmpty {
+                            Text("Completed today")
+                                .font(.headline)
+                                .foregroundStyle(.appPrimaryText)
+                                .padding(.horizontal)
+                                .padding(.top, 6)
+
+                            ForEach(completedFocusSessionsToday) { s in
+                                CompletedCard(
+                                    title: s.focusTitle,
+                                    subtitle: "That counted."
+                                )
+                                .padding(.horizontal)
+                            }
+                        }
                     }
                     .padding(.vertical, 12)
                 }
@@ -315,6 +330,17 @@ struct TodayView: View {
     private var secondarySuggestionInboxItem: InboxItem? {
         let tinyId = nextTinyInboxItem?.id
         return inboxItems.first(where: { $0.id != tinyId })
+    }
+    
+    private var completedFocusSessionsToday: [FocusSession] {
+        let startOfToday = Calendar.current.startOfDay(for: Date())
+
+        return sessions
+            .filter { s in
+                guard let ended = s.endedAt else { return false }
+                return ended >= startOfToday
+            }
+            .sorted { ($0.endedAt ?? .distantPast) > ($1.endedAt ?? .distantPast) }
     }
     
     private func friendlyScheduledDateTime(_ date: Date) -> String {
@@ -720,3 +746,31 @@ private struct ToastView: View {
             .shadow(color: .black.opacity(0.04), radius: 10, x: 0, y: 4)
     }
 }
+
+private struct CompletedCard: View {
+    let title: String
+    let subtitle: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(.appPrimaryText)
+
+            Text(subtitle)
+                .font(.footnote)
+                .foregroundStyle(.appSecondaryText)
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(.appSurface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.green.opacity(0.18), lineWidth: 1)
+        )
+        .shadow(color: Color.green.opacity(0.18), radius: 14, x: 0, y: 6) // soft green glow
+    }
+}
+

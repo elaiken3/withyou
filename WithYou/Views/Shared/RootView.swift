@@ -21,7 +21,7 @@ struct RootView: View {
                 .tag(AppTab.today)
                 .tabItem { Label("Today", systemImage: "sun.max") }
 
-            FocusSessionFlowView()
+            FocusSessionFlowView(selectedTab: $selectedTab)
                 .tag(AppTab.focus)
                 .tabItem { Label("Focus", systemImage: "timer") }
 
