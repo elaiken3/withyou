@@ -18,29 +18,28 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     ) -> Bool {
         log.info("✅ AppDelegate didFinishLaunching")
         UNUserNotificationCenter.current().delegate = self
+
+        Task { @MainActor in
+            await PushDebug.register()
+            log.info("🔧 isRegisteredForRemoteNotifications (after call): \(application.isRegisteredForRemoteNotifications, privacy: .public)")
+        }
+
         return true
     }
 
-    func application(
-        _ application: UIApplication,
-        didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
-    ) {
+    func application(_ application: UIApplication,
+                     didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         let token = deviceToken.map { String(format: "%02x", $0) }.joined()
         log.info("✅ APNs token: \(token, privacy: .public)")
     }
 
-    func application(
-        _ application: UIApplication,
-        didFailToRegisterForRemoteNotificationsWithError error: Error
-    ) {
+    func application(_ application: UIApplication,
+                     didFailToRegisterForRemoteNotificationsWithError error: Error) {
         log.error("❌ Failed to register for remote notifications: \(String(describing: error), privacy: .public)")
     }
 
-    // optional: show banners while app is foreground
-    func userNotificationCenter(
-        _ center: UNUserNotificationCenter,
-        willPresent notification: UNNotification
-    ) async -> UNNotificationPresentationOptions {
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
         [.banner, .sound]
     }
 }

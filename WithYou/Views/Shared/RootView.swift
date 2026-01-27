@@ -47,9 +47,6 @@ struct RootView: View {
             FocusSessionStore.normalizeActiveSessions(in: context)
             refreshPreferredScheme()
         }
-        .task {
-                    await PushDebug.register()
-                }
         // ✅ Re-evaluate periodically when RootView becomes active again (covers “back from settings” cases)
         .onChange(of: selectedTab) { _, _ in
             refreshPreferredScheme()

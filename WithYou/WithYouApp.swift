@@ -17,6 +17,7 @@ struct WithYouApp: App {
     let container: ModelContainer
 
     init() {
+        print("🚀 WithYouApp init")
 
         container = try! ModelContainer(
             for: InboxItem.self,
@@ -28,24 +29,6 @@ struct WithYouApp: App {
                 UserProfile.self,
                 AppState.self
         )
-        
-
-//        Task {
-//            print("🔔 Requesting notification authorization…")
-//            try? await NotificationManager.shared.requestAuthorization()
-//
-//            // Print current notification settings
-//            let settings = await UNUserNotificationCenter.current().notificationSettings()
-//            print("🔧 notification authorizationStatus:", settings.authorizationStatus.rawValue)
-//            print("🔧 alertSetting:", settings.alertSetting.rawValue)
-//
-//            await MainActor.run {
-//                print("🔧 isRegisteredForRemoteNotifications BEFORE:", UIApplication.shared.isRegisteredForRemoteNotifications)
-//                print("📨 Calling registerForRemoteNotifications()")
-//                UIApplication.shared.registerForRemoteNotifications()
-//                print("🔧 isRegisteredForRemoteNotifications AFTER:", UIApplication.shared.isRegisteredForRemoteNotifications)
-//            }
-//        }
         
     }
 
