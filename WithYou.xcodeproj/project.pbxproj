@@ -11,7 +11,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		629B7D262F208A3E00B2C884 /* Exceptions for "WithYou" folder in "WithYou" target */ = {
+		6204586A2F2883C300BA786A /* Exceptions for "WithYou" folder in "WithYou" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
@@ -24,7 +24,7 @@
 		623411632EFCE13800FB66E3 /* WithYou */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				629B7D262F208A3E00B2C884 /* Exceptions for "WithYou" folder in "WithYou" target */,
+				6204586A2F2883C300BA786A /* Exceptions for "WithYou" folder in "WithYou" target */,
 			);
 			path = WithYou;
 			sourceTree = "<group>";
@@ -264,6 +264,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = WithYou/WithYouDebug.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = BBHVK523SW;

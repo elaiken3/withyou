@@ -17,6 +17,7 @@ struct WithYouApp: App {
     let container: ModelContainer
 
     init() {
+        print("🚀 WithYouApp init")
 
         container = try! ModelContainer(
             for: InboxItem.self,

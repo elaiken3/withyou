@@ -17,7 +17,22 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         log.info("✅ AppDelegate didFinishLaunching")
-        UNUserNotificationCenter.current().delegate = self
+
+        let center = UNUserNotificationCenter.current()
+        center.delegate = self
+
+        Task { @MainActor in
+            log.info("🔔 Requesting notification authorization…")
+            let granted = try? await center.requestAuthorization(options: [.alert, .sound, .badge])
+            log.info("🔔 Authorization granted: \(granted ?? false, privacy: .public)")
+
+            let settings = await center.notificationSettings()
+            log.info("🔧 authorizationStatus: \(settings.authorizationStatus.rawValue, privacy: .public)")
+
+            log.info("📨 Calling registerForRemoteNotifications()…")
+            application.registerForRemoteNotifications()
+        }
+
         return true
     }
 
@@ -36,7 +51,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         log.error("❌ Failed to register for remote notifications: \(String(describing: error), privacy: .public)")
     }
 
-    // optional: show banners while app is foreground
+    // Show banners while app is foreground (v1 nice-to-have)
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification
