@@ -22,6 +22,10 @@ struct FocusTimerView: View {
 
     @State private var startedAt: Date?
     @State private var showTimeUpSheet: Bool = false
+    
+    @State private var isEnding = false
+    @State private var didEndOnce = false
+    @State private var didShowTimeUpSheet = false
 
     var body: some View {
         ZStack {
@@ -90,6 +94,7 @@ struct FocusTimerView: View {
                         endSession()
                     }
                     .buttonStyle(.borderedProminent)
+                    .disabled(isEnding || didEndOnce)
                 }
                 .tint(.appAccent)
 
@@ -260,7 +265,10 @@ struct FocusTimerView: View {
 
             if secondsRemaining <= 0 {
                 secondsRemaining = 0
-                if !showTimeUpSheet {
+
+                // ✅ Only show once per overtime “event”
+                if !didShowTimeUpSheet {
+                    didShowTimeUpSheet = true
                     showTimeUpSheet = true
                 }
             }
@@ -270,22 +278,35 @@ struct FocusTimerView: View {
     // MARK: - Session actions
 
     private func endSession() {
-        timer?.invalidate()
+        // ✅ Prevent double-end from End button + Wrap up + repeated taps
+        guard !isEnding, !didEndOnce else { return }
+        isEnding = true
+        didEndOnce = true
 
+        // ✅ Close any presented sheets so we don’t loop UI
+        showTimeUpSheet = false
+        showAddThought = false
+        showRefocus = false
+
+        timer?.invalidate()
         NotificationManager.shared.cancelFocusEnd(sessionId: session.id)
 
+        // ✅ If already ended, don’t rewrite it
+        if session.endedAt == nil {
+            session.endedAt = Date()
+        }
         session.isActive = false
-        session.endedAt = Date()
 
         do {
             try context.save()
             Haptics.success()
+            onFinish()
         } catch {
             Haptics.error()
             print("❌ Save failed (endSession):", error)
+            didEndOnce = false
+            isEnding = false
         }
-
-        onFinish()
     }
 
     private func extend(byMinutes minutes: Int) {
@@ -300,6 +321,8 @@ struct FocusTimerView: View {
         }
 
         recalcRemaining()
+        
+        didShowTimeUpSheet = false
 
         Task {
             guard let started = session.startedAt else { return }
