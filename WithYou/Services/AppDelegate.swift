@@ -17,45 +17,29 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         log.info("✅ AppDelegate didFinishLaunching")
-
-        let center = UNUserNotificationCenter.current()
-        center.delegate = self
+        UNUserNotificationCenter.current().delegate = self
 
         Task { @MainActor in
-            log.info("🔔 Requesting notification authorization…")
-            let granted = try? await center.requestAuthorization(options: [.alert, .sound, .badge])
-            log.info("🔔 Authorization granted: \(granted ?? false, privacy: .public)")
-
-            let settings = await center.notificationSettings()
-            log.info("🔧 authorizationStatus: \(settings.authorizationStatus.rawValue, privacy: .public)")
-
-            log.info("📨 Calling registerForRemoteNotifications()…")
-            application.registerForRemoteNotifications()
+            await PushDebug.register()
+            log.info("🔧 isRegisteredForRemoteNotifications (after call): \(application.isRegisteredForRemoteNotifications, privacy: .public)")
         }
 
         return true
     }
 
-    func application(
-        _ application: UIApplication,
-        didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
-    ) {
+    func application(_ application: UIApplication,
+                     didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         let token = deviceToken.map { String(format: "%02x", $0) }.joined()
         log.info("✅ APNs token: \(token, privacy: .public)")
     }
 
-    func application(
-        _ application: UIApplication,
-        didFailToRegisterForRemoteNotificationsWithError error: Error
-    ) {
+    func application(_ application: UIApplication,
+                     didFailToRegisterForRemoteNotificationsWithError error: Error) {
         log.error("❌ Failed to register for remote notifications: \(String(describing: error), privacy: .public)")
     }
 
-    // Show banners while app is foreground (v1 nice-to-have)
-    func userNotificationCenter(
-        _ center: UNUserNotificationCenter,
-        willPresent notification: UNNotification
-    ) async -> UNNotificationPresentationOptions {
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
         [.banner, .sound]
     }
 }
