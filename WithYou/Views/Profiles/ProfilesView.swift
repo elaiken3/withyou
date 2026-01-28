@@ -77,6 +77,9 @@ private struct ProfileDetailView: View {
     @Environment(\.modelContext) private var context
     @Bindable var profile: UserProfile
 
+    // TODO: replace with your real URL
+    private let howToURL = URL(string: "https://wearewithyou.app/how-to/")!
+
     var body: some View {
         Form {
             Section("Basics") {
@@ -118,6 +121,18 @@ private struct ProfileDetailView: View {
 
             Section("Capture routing") {
                 Toggle("Route capture to Focus Dump during focus", isOn: $profile.routeSiriToFocusDumpWhenActive)
+            }
+
+            Section("Help") {
+                Link(destination: howToURL) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "questionmark.circle")
+                        Text("How to use With You")
+                        Spacer()
+                        Image(systemName: "arrow.up.right")
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
         }
         .navigationTitle(profile.name)
