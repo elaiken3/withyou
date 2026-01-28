@@ -18,8 +18,13 @@ struct TodayView: View {
 
     // Pull data we know exists in your models
     @Query(sort: \VerboseReminder.scheduledAt, order: .forward) private var reminders: [VerboseReminder]
-    @Query(sort: \InboxItem.createdAt, order: .reverse) private var inboxItems: [InboxItem]
+
+    // NOTE: Unsorted so we can apply dynamic ordering (manual sortIndex first, else createdAt).
+    @Query private var inboxItems: [InboxItem]
+
     @Query(sort: \FocusSession.createdAt, order: .reverse) private var sessions: [FocusSession]
+
+    @AppStorage("inboxManualPrioritizationEnabled") private var manualPrioritizationEnabled: Bool = true
 
     @State private var showRefocus = false
     @State private var showScheduleForInboxItem: InboxItem?
@@ -85,8 +90,9 @@ struct TodayView: View {
 
                                 Button("Refocus (30 sec)") {
                                     Haptics.tap()
-                                    showRefocus = true }
-                                    .buttonStyle(.bordered)
+                                    showRefocus = true
+                                }
+                                .buttonStyle(.bordered)
                             }
                             .padding(.horizontal)
 
@@ -115,29 +121,29 @@ struct TodayView: View {
                                 editingReminder = next
                             }
 
-                        } else if let tiny = nextTinyInboxItem {
+                        } else if let item = rightNowInboxItem {
                             TodayTaskCard(
-                                title: tiny.title,
-                                startStep: tiny.startStep,
-                                estimateMinutes: tiny.estimateMinutes,
-                                primaryButtonTitle: "Do the first step (2 min)",
+                                title: item.title,
+                                startStep: item.startStep,
+                                estimateMinutes: item.estimateMinutes,
+                                primaryButtonTitle: "Do the first step",
                                 secondaryButtonTitle: "Make it smaller"
                             ) {
                                 startFocusSession(
-                                    title: tiny.title,
-                                    startStep: tiny.startStep,
+                                    title: item.title,
+                                    startStep: item.startStep,
                                     sourceKind: .inbox,
-                                    sourceId: tiny.id
+                                    sourceId: item.id
                                 )
                             } secondaryAction: {
                                 Haptics.tap()
-                                makeInboxItemSmaller(tiny)
+                                makeInboxItemSmaller(item)
                             }
                             .padding(.horizontal)
                             .contentShape(Rectangle())
                             .onTapGesture {
                                 Haptics.tap()
-                                editingInboxItem = tiny
+                                editingInboxItem = item
                             }
 
                         } else {
@@ -151,7 +157,7 @@ struct TodayView: View {
                             .foregroundStyle(.appPrimaryText)
                             .padding(.horizontal)
 
-                        if let suggestion = secondarySuggestionInboxItem {
+                        if let suggestion = ifYouHaveEnergyInboxItem {
                             SuggestionRow(
                                 title: suggestion.title,
                                 subtitle: "Start: \(suggestion.startStep) (\(suggestion.estimateMinutes) min)",
@@ -209,13 +215,14 @@ struct TodayView: View {
                         .padding(.horizontal)
 
                         // Gentle Inbox indicator (no guilt)
-                        if !inboxItems.isEmpty {
-                            Text("Inbox has \(inboxItems.count) item(s). You don’t need to clear it today.")
+                        if !orderedInboxItems.isEmpty {
+                            Text("Inbox has \(orderedInboxItems.count) item(s). You don’t need to clear it today.")
                                 .foregroundStyle(.appSecondaryText)
                                 .font(.footnote)
                                 .padding(.horizontal)
                                 .padding(.top, 4)
                         }
+
                         if !completedFocusSessionsToday.isEmpty {
                             Text("Completed today")
                                 .font(.headline)
@@ -296,10 +303,27 @@ struct TodayView: View {
                     selectedTab: $selectedTab,
                     focusSessions: sessions,
                     reminders: reminders,
-                    inboxItems: inboxItems
+                    inboxItems: orderedInboxItems
                 )
             }
             .tint(.appAccent)
+        }
+    }
+
+    // MARK: - Ordered Inbox (manual order drives Today suggestions)
+
+    private var orderedInboxItems: [InboxItem] {
+        if manualPrioritizationEnabled {
+            return inboxItems.sorted { a, b in
+                switch (a.sortIndex, b.sortIndex) {
+                case let (ai?, bi?): return ai < bi
+                case (_?, nil):     return true
+                case (nil, _?):     return false
+                case (nil, nil):    return a.createdAt > b.createdAt
+                }
+            }
+        } else {
+            return inboxItems.sorted { $0.createdAt > $1.createdAt }
         }
     }
 
@@ -333,15 +357,18 @@ struct TodayView: View {
         return candidates.max(by: { $0.scheduledAt < $1.scheduledAt })
     }
 
-    private var nextTinyInboxItem: InboxItem? {
-        inboxItems.first(where: { $0.estimateMinutes <= 5 })
+    // Manual order mapping:
+    // Right now = first inbox item (if no focus session, no reminder today)
+    // If you have energy = second inbox item
+    private var rightNowInboxItem: InboxItem? {
+        orderedInboxItems.first
     }
 
-    private var secondarySuggestionInboxItem: InboxItem? {
-        let tinyId = nextTinyInboxItem?.id
-        return inboxItems.first(where: { $0.id != tinyId })
+    private var ifYouHaveEnergyInboxItem: InboxItem? {
+        guard orderedInboxItems.count > 1 else { return nil }
+        return orderedInboxItems[1]
     }
-    
+
     private var completedFocusSessionsToday: [FocusSession] {
         let startOfToday = Calendar.current.startOfDay(for: Date())
 
@@ -352,7 +379,7 @@ struct TodayView: View {
             }
             .sorted { ($0.completedLoggedAt ?? .distantPast) > ($1.completedLoggedAt ?? .distantPast) }
     }
-    
+
     private func friendlyScheduledDateTime(_ date: Date) -> String {
         let calendar = Calendar.current
 
@@ -410,7 +437,7 @@ struct TodayView: View {
             toast("Couldn’t start focus. Try again.")
         }
     }
-    
+
     private func markMissedChecked(_ reminder: VerboseReminder) {
         reminder.lastCheckedAt = Date()
         do {
@@ -578,7 +605,6 @@ struct TodayView: View {
 
         toast("We’ll check again later to see if there was anything else.")
     }
-
 
     private func dismissMissedReminder(_ reminder: VerboseReminder) {
         // ✅ Cancel any pending notification first
@@ -830,45 +856,42 @@ struct CompletionStore {
 
         try? context.save()
     }
-    
+
     static func completeInboxItem(_ item: InboxItem, in context: ModelContext) {
-            let session = FocusSession(
-                focusTitle: item.title,
-                focusStartStep: item.startStep,
-                durationSeconds: 0,
-                createdAt: Date(),
-                startedAt: nil,
-                endedAt: Date(),
-                isActive: false,
-                completedLoggedAt: Date(),
-                sourceKindRaw: FocusSourceKind.inbox.rawValue,
-                sourceId: item.id
-            )
-            context.insert(session)
-            context.delete(item)
-            try? context.save()
-        }
+        let session = FocusSession(
+            focusTitle: item.title,
+            focusStartStep: item.startStep,
+            durationSeconds: 0,
+            createdAt: Date(),
+            startedAt: nil,
+            endedAt: Date(),
+            isActive: false,
+            completedLoggedAt: Date(),
+            sourceKindRaw: FocusSourceKind.inbox.rawValue,
+            sourceId: item.id
+        )
+        context.insert(session)
+        context.delete(item)
+        try? context.save()
+    }
 
-        static func completeReminder(_ reminder: VerboseReminder, in context: ModelContext) {
-            let session = FocusSession(
-                focusTitle: reminder.title,
-                focusStartStep: reminder.startStep,
-                durationSeconds: 0,
-                createdAt: Date(),
-                startedAt: nil,
-                endedAt: Date(),
-                isActive: false,
-                completedLoggedAt: Date(),
-                sourceKindRaw: FocusSourceKind.reminder.rawValue,
-                sourceId: reminder.id
-            )
-            context.insert(session)
+    static func completeReminder(_ reminder: VerboseReminder, in context: ModelContext) {
+        let session = FocusSession(
+            focusTitle: reminder.title,
+            focusStartStep: reminder.startStep,
+            durationSeconds: 0,
+            createdAt: Date(),
+            startedAt: nil,
+            endedAt: Date(),
+            isActive: false,
+            completedLoggedAt: Date(),
+            sourceKindRaw: FocusSourceKind.reminder.rawValue,
+            sourceId: reminder.id
+        )
+        context.insert(session)
 
-            NotificationManager.shared.cancelReminder(id: reminder.id)
-            reminder.isDone = true
-            try? context.save()
-        }
+        NotificationManager.shared.cancelReminder(id: reminder.id)
+        reminder.isDone = true
+        try? context.save()
+    }
 }
-
-
-
