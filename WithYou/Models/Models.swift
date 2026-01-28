@@ -24,13 +24,17 @@ final class InboxItem {
 
     var startStep: String
     var estimateMinutes: Int
+    
+    var sortIndex: Int?
 
     init(content: String,
          title: String,
          createdAt: Date = Date(),
          source: ItemSource,
          startStep: String,
-         estimateMinutes: Int = 3)
+         estimateMinutes: Int = 3,
+         sortIndex: Int? = nil
+    )
     {
         self.id = UUID()
         self.content = content
@@ -39,6 +43,7 @@ final class InboxItem {
         self.sourceRaw = source.rawValue
         self.startStep = startStep
         self.estimateMinutes = estimateMinutes
+        self.sortIndex = sortIndex
     }
 }
 
