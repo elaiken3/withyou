@@ -73,6 +73,17 @@ struct InboxDetailView: View {
                     }
                     .disabled(isDeleting)
                     .listRowBackground(Color.appBackground)
+                    
+                    Button {
+                        Haptics.tap()
+                        CompletionStore.completeInboxItem(item, in: context)
+                        Haptics.success()
+                        dismiss()
+                    } label: {
+                        Label("Mark completed", systemImage: "checkmark.circle")
+                    }
+                    .listRowBackground(Color.appBackground)
+
                 }
             }
             .listStyle(.insetGrouped)
@@ -101,6 +112,7 @@ struct InboxDetailView: View {
         }
         .sheet(isPresented: $showEdit) {
             EditInboxItemSheet(item: item)
+                .presentationBackground(Color.appBackground)
         }
         .confirmationDialog(
             "Let this go?",

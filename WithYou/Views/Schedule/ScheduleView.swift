@@ -47,6 +47,14 @@ struct ScheduleView: View {
                                             } label: {
                                                 Label("Not needed", systemImage: "trash")
                                             }
+                                            
+                                            Button {
+                                                Haptics.tap()
+                                                CompletionStore.completeReminder(reminder, in: context)
+                                            } label: {
+                                                Label("Completed", systemImage: "checkmark.circle")
+                                            }
+                                            .tint(.green)
                                         }
                                 }
                             }
@@ -68,7 +76,7 @@ struct ScheduleView: View {
             // Not needed confirmation
             .confirmationDialog(
                 "Let this go?",
-                isPresented: .constant(reminderPendingDeletion != nil),
+                isPresented: isConfirmingDeletion,
                 presenting: reminderPendingDeletion
             ) { reminder in
                 Button("Let go", role: .destructive) {
@@ -97,6 +105,15 @@ struct ScheduleView: View {
                 .foregroundStyle(.appSecondaryText)
         }
         .padding()
+    }
+    
+    private var isConfirmingDeletion: Binding<Bool> {
+        Binding(
+            get: { reminderPendingDeletion != nil },
+            set: { newValue in
+                if !newValue { reminderPendingDeletion = nil }
+            }
+        )
     }
 
     // MARK: - Grouping
