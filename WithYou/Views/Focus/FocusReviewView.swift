@@ -94,6 +94,7 @@ struct FocusReviewView: View {
 
                     Button("Return to Today") {
                         Haptics.tap()
+                        CompletionStore.completeFromSession(session, in: context)
                         onDone()
                     }
                     .buttonStyle(.borderedProminent)

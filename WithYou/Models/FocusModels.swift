@@ -8,6 +8,11 @@
 import Foundation
 import SwiftData
 
+enum FocusSourceKind: String {
+    case inbox
+    case reminder
+}
+
 @Model
 final class FocusSession {
     var id: UUID
@@ -18,6 +23,11 @@ final class FocusSession {
     var startedAt: Date?
     var endedAt: Date?
     var isActive: Bool
+    var completedLoggedAt: Date?
+
+    /// Links this focus session back to the thing it came from (Inbox or Reminder).
+    var sourceKindRaw: String?   // "inbox" | "reminder"
+    var sourceId: UUID?
 
     // NEW: persist pause across app restarts
     var pausedSeconds: Int
@@ -32,7 +42,10 @@ final class FocusSession {
         endedAt: Date? = nil,
         isActive: Bool = true,
         pausedSeconds: Int = 0,
-        pausedAt: Date? = nil
+        pausedAt: Date? = nil,
+        completedLoggedAt: Date? = nil,
+        sourceKindRaw: String? = nil,
+        sourceId: UUID? = nil
     ) {
         self.id = UUID()
         self.createdAt = createdAt
@@ -44,8 +57,12 @@ final class FocusSession {
         self.isActive = isActive
         self.pausedSeconds = pausedSeconds
         self.pausedAt = pausedAt
+        self.completedLoggedAt = completedLoggedAt
+        self.sourceKindRaw = sourceKindRaw
+        self.sourceId = sourceId
     }
 }
+
 @Model
 final class FocusDumpItem {
     var id: UUID

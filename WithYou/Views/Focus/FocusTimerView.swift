@@ -26,6 +26,7 @@ struct FocusTimerView: View {
     @State private var isEnding = false
     @State private var didEndOnce = false
     @State private var didShowTimeUpSheet = false
+    @State private var confirmComplete = false
 
     var body: some View {
         ZStack {
@@ -91,7 +92,7 @@ struct FocusTimerView: View {
 
                     Button("End") {
                         Haptics.tap()
-                        endSession()
+                        confirmComplete = true
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(isEnding || didEndOnce)
@@ -120,6 +121,23 @@ struct FocusTimerView: View {
         .sheet(isPresented: $showTimeUpSheet) {
             timeUpSheet
                 .presentationBackground(Color.appBackground)
+        }
+        .confirmationDialog(
+            "Did you complete “\(session.focusTitle)”?",
+            isPresented: $confirmComplete
+        ) {
+            Button("Yes, completed", role: .none) {
+                CompletionStore.completeFromSession(session, in: context)
+                onFinish()
+            }
+
+            Button("No, just stopping", role: .destructive) {
+                endSession()   // ends session but DOES NOT mark complete/remove source
+            }
+
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("If yes, I’ll move it to Completed Today and clear it from your Inbox/Schedule.")
         }
     }
 
@@ -225,7 +243,7 @@ struct FocusTimerView: View {
                     Button(role: .destructive) {
                         Haptics.tap()
                         showTimeUpSheet = false
-                        endSession()
+                        confirmComplete = true
                     } label: {
                         HStack {
                             Image(systemName: "checkmark.circle")
@@ -234,7 +252,7 @@ struct FocusTimerView: View {
                         .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
-
+                    
                     Spacer()
                 }
                 .padding()
@@ -262,6 +280,10 @@ struct FocusTimerView: View {
             if isPaused { return }
 
             recalcRemaining()
+            
+            if secondsRemaining > 0 {
+                didShowTimeUpSheet = false
+            }
 
             if secondsRemaining <= 0 {
                 secondsRemaining = 0
@@ -310,7 +332,23 @@ struct FocusTimerView: View {
     }
 
     private func extend(byMinutes minutes: Int) {
-        session.durationSeconds += minutes * 60
+        guard let startedAt else { return }
+
+        // How much time has effectively elapsed (excluding paused time)
+        let elapsed = Int(Date().timeIntervalSince(startedAt))
+
+        let livePausedExtra: Int
+        if let pausedAt = session.pausedAt {
+            livePausedExtra = Int(Date().timeIntervalSince(pausedAt))
+        } else {
+            livePausedExtra = 0
+        }
+
+        let effectiveElapsed = max(0, elapsed - (session.pausedSeconds + max(0, livePausedExtra)))
+
+        // ✅ If user is already overtime, extend from *now*
+        // durationSeconds becomes: "time already spent" + "extra minutes"
+        session.durationSeconds = effectiveElapsed + (minutes * 60)
 
         do {
             try context.save()
@@ -318,15 +356,15 @@ struct FocusTimerView: View {
         } catch {
             Haptics.error()
             print("❌ Save failed (extend):", error)
+            return
         }
 
+        // ✅ Immediately update UI so timer isn't stuck at 0
         recalcRemaining()
-        
-        didShowTimeUpSheet = false
+        showTimeUpSheet = false
 
         Task {
-            guard let started = session.startedAt else { return }
-            let endDate = started.addingTimeInterval(TimeInterval(session.durationSeconds))
+            let endDate = Date().addingTimeInterval(TimeInterval(secondsRemaining))
             NotificationManager.shared.cancelFocusEnd(sessionId: session.id)
             try? await NotificationManager.shared.scheduleFocusEnd(
                 sessionId: session.id,
