@@ -125,7 +125,7 @@ struct QuickAddView: View {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel") {
                         Haptics.tap()
-                        clearAndDismiss()
+                        resetStateAndDismiss()
                     }
                 }
 
@@ -165,18 +165,6 @@ struct QuickAddView: View {
         let explicit = startStepText.trimmingCharacters(in: .whitespacesAndNewlines)
         if !explicit.isEmpty { return explicit }
         return parsedStartStep
-    }
-
-    private func clearAndDismiss() {
-        text = ""
-        startStepText = ""
-        showFirstStep = false
-        lastErrorMessage = nil
-
-        isTextFocused = false
-        isFirstStepFocused = false
-
-        dismiss()
     }
 
     private func resetStateAndDismiss() {
