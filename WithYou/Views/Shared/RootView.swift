@@ -17,25 +17,11 @@ struct RootView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            TodayView(selectedTab: $selectedTab)
-                .tag(AppTab.today)
-                .tabItem { Label("Today", systemImage: "sun.max") }
-
-            FocusSessionFlowView(selectedTab: $selectedTab)
-                .tag(AppTab.focus)
-                .tabItem { Label("Focus", systemImage: "timer") }
-
-            InboxView()
-                .tag(AppTab.inbox)
-                .tabItem { Label("Inbox", systemImage: "tray") }
-
-            ScheduleView()
-                .tag(AppTab.schedule)
-                .tabItem { Label("Schedule", systemImage: "calendar") }
-
-            QuickAddView()
-                .tag(AppTab.capture)
-                .tabItem { Label("Capture", systemImage: "plus.circle.fill") }
+            ForEach(AppTab.ordered, id: \.self) { tab in
+                tabView(for: tab)
+                    .tag(tab)
+                    .tabItem { Label(tab.title, systemImage: tab.systemImage) }
+            }
         }
         // ✅ Apply to the whole app UI
         .preferredColorScheme(preferredScheme)
@@ -58,5 +44,21 @@ struct RootView: View {
 
         // If you implemented profile.colorSchemeRaw + AppColorScheme.preferred:
         preferredScheme = profile?.colorScheme.preferred
+    }
+
+    @ViewBuilder
+    private func tabView(for tab: AppTab) -> some View {
+        switch tab {
+        case .today:
+            TodayView(selectedTab: $selectedTab)
+        case .focus:
+            FocusSessionFlowView(selectedTab: $selectedTab)
+        case .inbox:
+            InboxView()
+        case .schedule:
+            ScheduleView()
+        case .capture:
+            QuickAddView()
+        }
     }
 }
