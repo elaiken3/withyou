@@ -15,6 +15,7 @@ enum PushDebug {
     static let log = Logger(subsystem: "com.commongenelabs.WithYou", category: "push")
 
     static func register() async {
+#if DEBUG
         print("🚀 PushDebug.register() started (print)")
         log.info("🚀 PushDebug.register() started")
 
@@ -39,5 +40,6 @@ enum PushDebug {
 
         print("📨 called registerForRemoteNotifications() (print)")
         log.info("📨 called UIApplication.registerForRemoteNotifications()")
+#endif
     }
 }
