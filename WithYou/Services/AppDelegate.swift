@@ -24,18 +24,35 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             log.info("🔧 isRegisteredForRemoteNotifications (after call): \(application.isRegisteredForRemoteNotifications, privacy: .public)")
         }
 
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            Task {
+                if let token = DeviceRegistration.cachedToken() {
+                    await DeviceRegistration.registerIfNeeded(token: token)
+                }
+            }
+        }
+
         return true
+    }
+
+    func application(_ application: UIApplication,
+                     didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        log.error("❌ Failed to register for remote notifications: \(String(describing: error), privacy: .public)")
     }
 
     func application(_ application: UIApplication,
                      didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         let token = deviceToken.map { String(format: "%02x", $0) }.joined()
         log.info("✅ APNs token: \(token, privacy: .public)")
-    }
 
-    func application(_ application: UIApplication,
-                     didFailToRegisterForRemoteNotificationsWithError error: Error) {
-        log.error("❌ Failed to register for remote notifications: \(String(describing: error), privacy: .public)")
+        Task {
+            DeviceRegistration.storeToken(token)
+            await DeviceRegistration.registerIfNeeded(token: token)
+        }
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter,

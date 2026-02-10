@@ -80,6 +80,8 @@ private struct ProfileDetailView: View {
     // TODO: replace with your real URL
     private let howToURL = URL(string: "https://wearewithyou.app/how-to/")!
 
+    @State private var isRegisteringPush = false
+
     var body: some View {
         Form {
             Section("Basics") {
@@ -134,6 +136,28 @@ private struct ProfileDetailView: View {
                     }
                 }
             }
+#if DEBUG
+            Section("Debug") {
+                Button {
+                    isRegisteringPush = true
+                    Task {
+                        if let token = DeviceRegistration.cachedToken() {
+                            await DeviceRegistration.registerIfNeeded(token: token, force: true)
+                        }
+                        isRegisteringPush = false
+                    }
+                } label: {
+                    HStack {
+                        Text(isRegisteringPush ? "Registering…" : "Re-register push token")
+                        Spacer()
+                        if isRegisteringPush {
+                            ProgressView()
+                        }
+                    }
+                }
+                .disabled(isRegisteringPush)
+            }
+#endif
         }
         .navigationTitle(profile.name)
         .onDisappear { try? context.save() }
