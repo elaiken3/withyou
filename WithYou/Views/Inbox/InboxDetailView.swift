@@ -163,44 +163,22 @@ struct InboxDetailView: View {
 
     private func schedule(date: Date) {
         Haptics.tap()
-
-        let reminder = VerboseReminder(
-            title: item.title,
-            startStep: item.startStep,
-            estimateMinutes: item.estimateMinutes,
-            scheduledAt: date
-        )
-
-        context.insert(reminder)
-        context.delete(item)
-
-        do {
-            try context.save()
-            Haptics.success()
-            dismiss() // scheduled items leave Inbox
-        } catch {
-            Haptics.error()
-            print("❌ Save failed (schedule):", error)
-            return
-        }
-
         Task {
-            let body =
-            """
-            Start: \(reminder.startStep) (\(reminder.estimateMinutes) min)
-            Tap “Help me start” if you’re stuck.
-            """
-
             do {
-                try await NotificationManager.shared.scheduleReminder(
-                    id: reminder.id,
-                    title: reminder.title,
-                    body: body,
-                    scheduledAt: reminder.scheduledAt
+                _ = try await ReminderStore.createAndSchedule(
+                    title: item.title,
+                    startStep: item.startStep,
+                    estimateMinutes: item.estimateMinutes,
+                    scheduledAt: date,
+                    in: context
                 )
+                context.delete(item)
+                try context.save()
+                Haptics.success()
+                dismiss() // scheduled items leave Inbox
             } catch {
-                // Not fatal; reminder exists in SwiftData.
-                print("❌ Notification schedule failed:", error)
+                Haptics.error()
+                print("❌ Save failed (schedule):", error)
             }
         }
     }

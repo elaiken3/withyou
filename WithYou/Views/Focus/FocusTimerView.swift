@@ -18,7 +18,6 @@ struct FocusTimerView: View {
     @State private var showAddThought = false
     @State private var thoughtText = ""
     @State private var showRefocus = false
-    @State private var timer: Timer?
 
     @State private var startedAt: Date?
     @State private var showTimeUpSheet: Bool = false
@@ -27,6 +26,8 @@ struct FocusTimerView: View {
     @State private var didEndOnce = false
     @State private var didShowTimeUpSheet = false
     @State private var confirmComplete = false
+    
+    private let tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
         ZStack {
@@ -107,9 +108,26 @@ struct FocusTimerView: View {
             hydratePauseStateFromSession()
             ensureStartedAt()
             recalcRemaining()
-            startTimer()
         }
-        .onDisappear { timer?.invalidate() }
+        .onReceive(tick) { _ in
+            guard !isPaused else { return }
+
+            recalcRemaining()
+
+            if secondsRemaining > 0 {
+                didShowTimeUpSheet = false
+            }
+
+            if secondsRemaining <= 0 {
+                secondsRemaining = 0
+
+                // ✅ Only show once per overtime “event”
+                if !didShowTimeUpSheet {
+                    didShowTimeUpSheet = true
+                    showTimeUpSheet = true
+                }
+            }
+        }
         .sheet(isPresented: $showAddThought) {
             addThoughtSheet
                 .presentationBackground(Color.appBackground)
@@ -272,31 +290,6 @@ struct FocusTimerView: View {
         .presentationDetents([.medium])
     }
 
-    // MARK: - Timer
-
-    private func startTimer() {
-        timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-            if isPaused { return }
-
-            recalcRemaining()
-            
-            if secondsRemaining > 0 {
-                didShowTimeUpSheet = false
-            }
-
-            if secondsRemaining <= 0 {
-                secondsRemaining = 0
-
-                // ✅ Only show once per overtime “event”
-                if !didShowTimeUpSheet {
-                    didShowTimeUpSheet = true
-                    showTimeUpSheet = true
-                }
-            }
-        }
-    }
-
     // MARK: - Session actions
 
     private func endSession() {
@@ -310,7 +303,6 @@ struct FocusTimerView: View {
         showAddThought = false
         showRefocus = false
 
-        timer?.invalidate()
         NotificationManager.shared.cancelFocusEnd(sessionId: session.id)
 
         // ✅ If already ended, don’t rewrite it

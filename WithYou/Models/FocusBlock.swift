@@ -10,6 +10,7 @@ import SwiftData
 
 @Model
 final class FocusBlock {
+    // Reserved for a future scheduled-focus flow (not yet wired into UI).
     var id: UUID
     var createdAt: Date
     var scheduledAt: Date

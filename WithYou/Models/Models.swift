@@ -45,6 +45,11 @@ final class InboxItem {
         self.estimateMinutes = estimateMinutes
         self.sortIndex = sortIndex
     }
+
+    var source: ItemSource {
+        get { ItemSource(rawValue: sourceRaw) ?? .app }
+        set { sourceRaw = newValue.rawValue }
+    }
 }
 
 @Model

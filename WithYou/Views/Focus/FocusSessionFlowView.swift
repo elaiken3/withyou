@@ -263,6 +263,8 @@ struct FocusSessionFlowView: View {
         }
         .modifier(ConditionalButtonStyle(isProminent: isSelected))
         .tint(isSelected ? .appAccent : .appAccent)
+        .accessibilityLabel("Set duration to \(label) minutes")
+        .accessibilityHint(isSelected ? "Selected" : "Double tap to select")
     }
 
     private var dumpView: some View {

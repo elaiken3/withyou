@@ -140,33 +140,22 @@ struct FocusReviewView: View {
         let parsed = parser.parse(item.text, profile: profile)
 
         let when = tomorrowMorning(profile: profile)
-        let reminder = VerboseReminder(
-            title: parsed.title,
-            startStep: parsed.startStep,
-            estimateMinutes: parsed.estimateMinutes,
-            scheduledAt: when
-        )
-
-        context.insert(reminder)
-        context.delete(item)
-
-        do {
-            try context.save()
-            Haptics.success()
-        } catch {
-            Haptics.error()
-            print("❌ Save failed (scheduleTomorrowMorning):", error)
-            return
-        }
-
         Task {
-            let body = "Start: \(reminder.startStep) (\(reminder.estimateMinutes) min)\nTap “Help me start” if you’re stuck."
-            try? await NotificationManager.shared.scheduleReminder(
-                id: reminder.id,
-                title: reminder.title,
-                body: body,
-                scheduledAt: reminder.scheduledAt
-            )
+            do {
+                _ = try await ReminderStore.createAndSchedule(
+                    title: parsed.title,
+                    startStep: parsed.startStep,
+                    estimateMinutes: parsed.estimateMinutes,
+                    scheduledAt: when,
+                    in: context
+                )
+                context.delete(item)
+                try context.save()
+                Haptics.success()
+            } catch {
+                Haptics.error()
+                print("❌ Save failed (scheduleTomorrowMorning):", error)
+            }
         }
     }
 
