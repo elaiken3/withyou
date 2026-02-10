@@ -16,13 +16,16 @@ struct DeviceRegisterPayload: Encodable {
 }
 
 enum BackendClient {
-    static let baseURL = URL(string: "https://withyou-backend.fly.dev")!
+    static let baseURL = AppConfig.apiBaseURL
 
     static func registerDevice(_ payload: DeviceRegisterPayload) async throws {
         let url = baseURL.appendingPathComponent("/v1/devices/register")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let apiKey = AppConfig.apiKey {
+            request.setValue(apiKey, forHTTPHeaderField: "X-API-Key")
+        }
         request.httpBody = try JSONEncoder().encode(payload)
 
         let (_, response) = try await URLSession.shared.data(for: request)

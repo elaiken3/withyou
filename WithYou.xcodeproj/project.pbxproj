@@ -8,6 +8,7 @@
 
 /* Begin PBXFileReference section */
 		623411612EFCE13800FB66E3 /* WithYou.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WithYou.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A4A83592C7294DE698FE6261 /* WithYou.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = WithYou.xcconfig; path = WithYou/Config/WithYou.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -259,8 +260,9 @@
 			};
 			name = Release;
 		};
-		6234116D2EFCE13A00FB66E3 /* Debug */ = {
+6234116D2EFCE13A00FB66E3 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = A4A83592C7294DE698FE6261 /* WithYou.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -296,8 +298,9 @@
 			};
 			name = Debug;
 		};
-		6234116E2EFCE13A00FB66E3 /* Release */ = {
+6234116E2EFCE13A00FB66E3 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = A4A83592C7294DE698FE6261 /* WithYou.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
