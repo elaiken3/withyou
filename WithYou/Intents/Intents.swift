@@ -40,17 +40,13 @@ struct CaptureInWithYouIntent: AppIntent {
         let parsed = parser.parse(content, profile: profile)
 
         if let when = parsed.scheduledAt {
-            let reminder = VerboseReminder(
+            _ = try await ReminderStore.createAndSchedule(
                 title: parsed.title,
                 startStep: parsed.startStep,
                 estimateMinutes: parsed.estimateMinutes,
-                scheduledAt: when
+                scheduledAt: when,
+                in: context
             )
-            context.insert(reminder)
-            try context.save()
-
-            let body = "Start: \(reminder.startStep) (\(reminder.estimateMinutes) min)\nTap “Help me start” if you’re stuck."
-            try await NotificationManager.shared.scheduleReminder(id: reminder.id, title: reminder.title, body: body, scheduledAt: reminder.scheduledAt)
 
             return .result(dialog: "Scheduled for \(when.formatted(date: .abbreviated, time: .shortened)).")
         } else {
@@ -86,4 +82,3 @@ struct WithYouShortcuts: AppShortcutsProvider {
 
     static var shortcutTileColor: ShortcutTileColor = .blue
 }
-

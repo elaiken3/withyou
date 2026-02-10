@@ -250,45 +250,23 @@ struct QuickAddView: View {
 
         // Smart mode: schedule if time detected
         if let when = parsed.scheduledAt {
-            let reminder = VerboseReminder(
-                title: parsed.title,
-                startStep: startStepToUse,
-                estimateMinutes: parsed.estimateMinutes,
-                scheduledAt: when
-            )
-            context.insert(reminder)
-
-            do {
-                try context.save()
-                Haptics.success()
-            } catch {
-                Haptics.error()
-                lastErrorMessage = "Couldn’t schedule. Try again."
-                print("❌ Save failed (Reminder):", error)
-                isSaving = false
-                return
-            }
-
             Task {
-                let body =
-                """
-                Start: \(reminder.startStep) (\(reminder.estimateMinutes) min)
-                Tap “Help me start” if you’re stuck.
-                """
-
                 do {
-                    try await NotificationManager.shared.scheduleReminder(
-                        id: reminder.id,
-                        title: reminder.title,
-                        body: body,
-                        scheduledAt: reminder.scheduledAt
+                    _ = try await ReminderStore.createAndSchedule(
+                        title: parsed.title,
+                        startStep: startStepToUse,
+                        estimateMinutes: parsed.estimateMinutes,
+                        scheduledAt: when,
+                        in: context
                     )
+                    Haptics.success()
+                    resetStateAndDismiss()
                 } catch {
-                    print("❌ Notification schedule failed:", error)
+                    Haptics.error()
+                    lastErrorMessage = "Couldn’t schedule. Try again."
+                    isSaving = false
                 }
             }
-
-            resetStateAndDismiss()
         } else {
             let inbox = InboxItem(
                 content: trimmedText,

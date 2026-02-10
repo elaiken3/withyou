@@ -53,16 +53,19 @@ struct TodayView: View {
                                     rescheduleMissedToToday(missed)
                                 }
                                 .buttonStyle(.borderedProminent)
+                                .accessibilityLabel("Reschedule for today")
 
                                 Button("Later") {
                                     markMissedChecked(missed) // sets lastCheckedAt + toast
                                 }
                                 .buttonStyle(.bordered)
+                                .accessibilityLabel("Ask again later")
 
                                 Button("Not needed") {
                                     dismissMissedReminder(missed)
                                 }
                                 .buttonStyle(.bordered)
+                                .accessibilityLabel("Let this reminder go")
                             }
                             .padding(.horizontal)
                             .contentShape(Rectangle())
@@ -87,12 +90,14 @@ struct TodayView: View {
                                     selectedTab = .focus
                                 }
                                 .buttonStyle(.borderedProminent)
+                                .accessibilityLabel("Resume focus session")
 
                                 Button("Refocus (30 sec)") {
                                     Haptics.tap()
                                     showRefocus = true
                                 }
                                 .buttonStyle(.bordered)
+                                .accessibilityLabel("Start a 30 second refocus")
                             }
                             .padding(.horizontal)
 
@@ -200,6 +205,7 @@ struct TodayView: View {
                         }
                         .buttonStyle(.bordered)
                         .padding(.horizontal)
+                        .accessibilityLabel("Start a 30 second refocus")
 
                         Button {
                             Haptics.tap()
@@ -213,6 +219,7 @@ struct TodayView: View {
                         }
                         .buttonStyle(.bordered)
                         .padding(.horizontal)
+                        .accessibilityLabel("Open the stuck helper")
 
                         // Gentle Inbox indicator (no guilt)
                         if !orderedInboxItems.isEmpty {
@@ -342,11 +349,13 @@ struct TodayView: View {
     /// One missed reminder (no backlog, no overdue)
     private var missedReminder: VerboseReminder? {
         let cooldown: TimeInterval = 90 * 60 // 90 minutes
+        let maxAge: TimeInterval = 14 * 24 * 60 * 60 // 14 days
         let now = Date()
 
         let candidates = reminders.filter { r in
             r.scheduledAt < now
             && r.isDone == false
+            && now.timeIntervalSince(r.scheduledAt) <= maxAge
             && (
                 r.lastCheckedAt == nil
                 || now.timeIntervalSince(r.lastCheckedAt!) > cooldown
@@ -473,46 +482,26 @@ struct TodayView: View {
     }
 
     private func convertInboxItemToReminder(_ item: InboxItem, date: Date) {
-        let reminder = VerboseReminder(
-            title: item.title,
-            startStep: item.startStep,
-            estimateMinutes: item.estimateMinutes,
-            scheduledAt: date
-        )
-        context.insert(reminder)
-        context.delete(item)
         Haptics.tap()
-
-        do {
-            Haptics.success()
-            try context.save()
-        } catch {
-            Haptics.error()
-            print("❌ Save failed (convertInboxItemToReminder):", error)
-            toast("Couldn’t schedule that. Try again.")
-            return
-        }
-
         Task {
-            let body =
-            """
-            Start: \(reminder.startStep) (\(reminder.estimateMinutes) min)
-            Tap “Help me start” if you’re stuck.
-            """
-
             do {
-                try await NotificationManager.shared.scheduleReminder(
-                    id: reminder.id,
-                    title: reminder.title,
-                    body: body,
-                    scheduledAt: reminder.scheduledAt
+                _ = try await ReminderStore.createAndSchedule(
+                    title: item.title,
+                    startStep: item.startStep,
+                    estimateMinutes: item.estimateMinutes,
+                    scheduledAt: date,
+                    in: context
                 )
+                context.delete(item)
+                try context.save()
+                Haptics.success()
+                toast("Scheduled. You don’t have to hold it in your head.")
             } catch {
-                print("❌ Notification schedule failed:", error)
+                Haptics.error()
+                print("❌ Save failed (convertInboxItemToReminder):", error)
+                toast("Couldn’t schedule that. Try again.")
             }
         }
-
-        toast("Scheduled. You don’t have to hold it in your head.")
     }
 
     private func rescheduleReminder(_ reminder: VerboseReminder, to date: Date) {
@@ -655,9 +644,13 @@ private struct TodayTaskCard: View {
             HStack {
                 Button(primaryButtonTitle, action: primaryAction)
                     .buttonStyle(.borderedProminent)
+                    .accessibilityLabel(primaryButtonTitle)
+                    .accessibilityHint("Primary action for this card")
 
                 Button(secondaryButtonTitle, action: secondaryAction)
                     .buttonStyle(.bordered)
+                    .accessibilityLabel(secondaryButtonTitle)
+                    .accessibilityHint("Secondary action for this card")
             }
         }
         .padding(14)
@@ -745,9 +738,13 @@ private struct SuggestionRow: View {
             HStack {
                 Button(primaryTitle, action: primary)
                     .buttonStyle(.bordered)
+                    .accessibilityLabel(primaryTitle)
+                    .accessibilityHint("Primary action for this card")
 
                 Button(secondaryTitle, action: secondary)
                     .buttonStyle(.bordered)
+                    .accessibilityLabel(secondaryTitle)
+                    .accessibilityHint("Secondary action for this card")
             }
         }
         .padding(14)
@@ -818,80 +815,4 @@ private struct CompletedCard: View {
     }
 }
 
-struct CompletionStore {
-    static func completeFromSession(_ session: FocusSession, in context: ModelContext) {
-        // 1) Prevent duplicates
-        if session.completedLoggedAt != nil { return }
-        session.completedLoggedAt = Date()
-
-        // 2) Clear source item
-        if let kindRaw = session.sourceKindRaw,
-           let kind = FocusSourceKind(rawValue: kindRaw),
-           let sourceId = session.sourceId {
-
-            switch kind {
-            case .inbox:
-                // find inbox item and delete it
-                let descriptor = FetchDescriptor<InboxItem>()
-                if let item = (try? context.fetch(descriptor))?.first(where: { $0.id == sourceId }) {
-                    context.delete(item)
-                }
-
-            case .reminder:
-                let descriptor = FetchDescriptor<VerboseReminder>()
-                if let r = (try? context.fetch(descriptor))?.first(where: { $0.id == sourceId }) {
-                    NotificationManager.shared.cancelReminder(id: r.id)
-                    r.isDone = true
-                    // optional: also delete if you don't want done reminders hanging around
-                    // context.delete(r)
-                }
-            }
-        }
-
-        // 3) End session so it disappears from “Right now”
-        session.isActive = false
-        if session.endedAt == nil {
-            session.endedAt = Date()
-        }
-
-        try? context.save()
-    }
-
-    static func completeInboxItem(_ item: InboxItem, in context: ModelContext) {
-        let session = FocusSession(
-            focusTitle: item.title,
-            focusStartStep: item.startStep,
-            durationSeconds: 0,
-            createdAt: Date(),
-            startedAt: nil,
-            endedAt: Date(),
-            isActive: false,
-            completedLoggedAt: Date(),
-            sourceKindRaw: FocusSourceKind.inbox.rawValue,
-            sourceId: item.id
-        )
-        context.insert(session)
-        context.delete(item)
-        try? context.save()
-    }
-
-    static func completeReminder(_ reminder: VerboseReminder, in context: ModelContext) {
-        let session = FocusSession(
-            focusTitle: reminder.title,
-            focusStartStep: reminder.startStep,
-            durationSeconds: 0,
-            createdAt: Date(),
-            startedAt: nil,
-            endedAt: Date(),
-            isActive: false,
-            completedLoggedAt: Date(),
-            sourceKindRaw: FocusSourceKind.reminder.rawValue,
-            sourceId: reminder.id
-        )
-        context.insert(session)
-
-        NotificationManager.shared.cancelReminder(id: reminder.id)
-        reminder.isDone = true
-        try? context.save()
-    }
-}
+// CompletionStore moved to Services/CompletionStore.swift

@@ -49,6 +49,7 @@ struct RefocusView: View {
 
                     BreathingOrb(isInhaling: isInhaling)
                         .padding(.vertical, 6)
+                        .accessibilityHidden(true)
 
                     VStack(spacing: 10) {
                         Text("\(secondsRemaining)")
@@ -61,6 +62,9 @@ struct RefocusView: View {
                                 .transition(.opacity)
                                 .animation(.easeInOut(duration: 0.4), value: isInhaling)
                     }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Refocus countdown")
+                    .accessibilityValue("\(secondsRemaining) seconds, \(breathPrompt(for: secondsRemaining))")
                     .frame(maxWidth: .infinity)
                     .padding(16)
                     .background(
