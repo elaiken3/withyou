@@ -75,6 +75,8 @@ struct InboxView: View {
                             if !isReorderMode {
                                 ensureSortIndexesExist()
                                 orderedItems = displayedItems
+                            } else {
+                                persistCurrentOrder()
                             }
                             editMode = isReorderMode ? .inactive : .active
                         }
@@ -165,11 +167,13 @@ struct InboxView: View {
         var reordered = orderedItems
         reordered.move(fromOffsets: source, toOffset: destination)
         orderedItems = reordered
-
-        for (idx, item) in reordered.enumerated() {
+    }
+    
+    private func persistCurrentOrder() {
+        for (idx, item) in orderedItems.enumerated() {
             item.sortIndex = idx
         }
-
+        
         do {
             try context.save()
             Haptics.success()
