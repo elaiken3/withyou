@@ -24,7 +24,11 @@ enum AppConfig {
         guard let raw = Bundle.main.object(forInfoDictionaryKey: key) as? String else {
             return nil
         }
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        var trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if (trimmed.hasPrefix("\"") && trimmed.hasSuffix("\""))
+            || (trimmed.hasPrefix("'") && trimmed.hasSuffix("'")) {
+            trimmed = String(trimmed.dropFirst().dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
         if trimmed.hasPrefix("$(") && trimmed.hasSuffix(")") {
             return nil
         }
