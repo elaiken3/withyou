@@ -11,7 +11,6 @@ import SwiftData
 struct InboxView: View {
     @Environment(\.modelContext) private var context
 
-    // NOTE: We query unsorted so we can apply dynamic ordering (manual sortIndex first, else createdAt).
     @Query private var items: [InboxItem]
 
     @AppStorage("inboxManualPrioritizationEnabled") private var manualPrioritizationEnabled: Bool = true
@@ -24,61 +23,17 @@ struct InboxView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Color.appBackground.ignoresSafeArea()
+                Color("AppBackground").ignoresSafeArea()
 
-                List {
-                    if currentItems.isEmpty {
-                        emptyStateRow
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.appBackground)
-                    } else {
-                        ForEach(currentItems, id: \.id) { item in
-                            rowContent(for: item)
-                        }
-                        .onMove(perform: isReorderMode ? handleMove : nil)
-                    }
-                }
-                .environment(\.editMode, $editMode)
-                .environment(\.defaultMinListRowHeight, 44)
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
-                .background(Color.appBackground)
+                listContent
             }
             .navigationTitle("Inbox")
             .navigationBarTitleDisplayMode(.inline)
-            .tint(.appAccent)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    if manualPrioritizationEnabled {
-                        Button(isReorderMode ? "Done" : "Reorder") {
-                            Haptics.tap()
-                            if !isReorderMode {
-                                // Snapshot the current display order before entering reorder mode
-                                orderedItems = displayedItems
-                                editMode = .active
-                            } else {
-                                persistCurrentOrder()
-                                editMode = .inactive
-                            }
-                        }
-                        .accessibilityLabel(isReorderMode ? "Finish reordering inbox" : "Reorder inbox")
-                    }
-                }
-
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        Haptics.tap()
-                        showQuickAdd = true
-                    } label: {
-                        Image(systemName: "plus")
-                    }
-                    .accessibilityLabel("Quick add to inbox")
-                    .disabled(isReorderMode)
-                }
-            }
+            .tint(Color("AppAccent"))
+            .toolbar { toolbarItems }
             .sheet(isPresented: $showQuickAdd) {
                 QuickAddView()
-                    .presentationBackground(Color.appBackground)
+                    .presentationBackground(Color("AppBackground"))
             }
             .confirmationDialog(
                 "Let this go?",
@@ -101,20 +56,40 @@ struct InboxView: View {
         }
     }
 
-    // MARK: - Display ordering
+    // MARK: - List
 
-    /// Which items to show: the mutable reorder snapshot when in edit mode,
-    /// otherwise the computed display order from the query.
-    private var currentItems: [InboxItem] {
-        isReorderMode ? orderedItems : displayedItems
+    private var listContent: some View {
+        List {
+            if currentItems.isEmpty {
+                emptyStateRow
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color("AppBackground"))
+            } else {
+                ForEach(currentItems, id: \.id) { item in
+                    rowContent(for: item)
+                }
+                .onMove { from, to in
+                    if isReorderMode {
+                        handleMove(from: from, to: to)
+                    }
+                }
+            }
+        }
+        .environment(\.editMode, $editMode)
+        .environment(\.defaultMinListRowHeight, 44)
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(Color("AppBackground"))
     }
+
+    // MARK: - Row content (extracted for type-checker)
 
     @ViewBuilder
     private func rowContent(for item: InboxItem) -> some View {
         if isReorderMode {
             InboxRow(item: item)
                 .listRowSeparator(.hidden)
-                .listRowBackground(Color.appBackground)
+                .listRowBackground(Color("AppBackground"))
         } else {
             NavigationLink {
                 InboxDetailView(item: item)
@@ -122,7 +97,7 @@ struct InboxView: View {
                 InboxRow(item: item)
             }
             .listRowSeparator(.hidden)
-            .listRowBackground(Color.appBackground)
+            .listRowBackground(Color("AppBackground"))
             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                 Button(role: .destructive) {
                     Haptics.tap()
@@ -132,6 +107,52 @@ struct InboxView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Toolbar
+
+    @ToolbarContentBuilder
+    private var toolbarItems: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            reorderButton
+        }
+        ToolbarItem(placement: .topBarTrailing) {
+            addButton
+        }
+    }
+
+    @ViewBuilder
+    private var reorderButton: some View {
+        if manualPrioritizationEnabled {
+            Button(isReorderMode ? "Done" : "Reorder") {
+                Haptics.tap()
+                if !isReorderMode {
+                    orderedItems = displayedItems
+                    editMode = .active
+                } else {
+                    persistCurrentOrder()
+                    editMode = .inactive
+                }
+            }
+            .accessibilityLabel(isReorderMode ? "Finish reordering inbox" : "Reorder inbox")
+        }
+    }
+
+    private var addButton: some View {
+        Button {
+            Haptics.tap()
+            showQuickAdd = true
+        } label: {
+            Image(systemName: "plus")
+        }
+        .accessibilityLabel("Quick add to inbox")
+        .disabled(isReorderMode)
+    }
+
+    // MARK: - Display ordering
+
+    private var currentItems: [InboxItem] {
+        isReorderMode ? orderedItems : displayedItems
     }
 
     private var displayedItems: [InboxItem] {
@@ -178,10 +199,10 @@ struct InboxView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Inbox is empty")
                 .font(.headline)
-                .foregroundStyle(.appPrimaryText)
+                .foregroundStyle(Color("AppPrimaryText"))
 
             Text("Captured thoughts land here when there's no time yet.")
-                .foregroundStyle(.appSecondaryText)
+                .foregroundStyle(Color("AppSecondaryText"))
         }
         .padding(.vertical, 12)
         .padding(.horizontal, 6)
@@ -209,20 +230,20 @@ private struct InboxRow: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(item.title)
                 .font(.headline)
-                .foregroundStyle(.appPrimaryText)
+                .foregroundStyle(Color("AppPrimaryText"))
 
             Text("Start: \(item.startStep) (\(item.estimateMinutes) min)")
-                .foregroundStyle(.appSecondaryText)
+                .foregroundStyle(Color("AppSecondaryText"))
                 .lineLimit(2)
         }
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(.appSurface)
+                .fill(Color("AppSurface"))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(.appHairline.opacity(0.10), lineWidth: 1)
+                .stroke(Color("AppHairline").opacity(0.10), lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.03), radius: 8, x: 0, y: 4)
         .padding(.vertical, 1)
