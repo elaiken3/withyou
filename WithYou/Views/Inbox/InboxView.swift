@@ -26,10 +26,12 @@ struct InboxView: View {
             ZStack {
                 Color.appBackground.ignoresSafeArea()
 
-                if isReorderMode {
-                    reorderList
-                } else {
-                    normalList
+                Group {
+                    if isReorderMode {
+                        reorderList
+                    } else {
+                        normalList
+                    }
                 }
                 .environment(\.editMode, $editMode)
                 .environment(\.defaultMinListRowHeight, 44)
