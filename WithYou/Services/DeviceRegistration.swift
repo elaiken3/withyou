@@ -29,6 +29,8 @@ enum DeviceRegistration {
 
     private static let tokenKey = "withyou.apns_token"
     private static let lastSentSignatureKey = "withyou.apns_last_sent_signature"
+    private static let lastFailureSignatureKey = "withyou.apns_last_failure_signature"
+    private static let lastFailureAtKey = "withyou.apns_last_failure_at"
 
     static func storeToken(_ token: String) {
         UserDefaults.standard.set(token, forKey: tokenKey)
@@ -55,6 +57,10 @@ enum DeviceRegistration {
             log.info("ℹ️ Device registration unchanged; skipping")
             return
         }
+        if !force, shouldDelayRetry(for: signature) {
+            log.info("ℹ️ Recent device registration failure; delaying retry")
+            return
+        }
         
         guard await gate.begin() else {
             log.info("ℹ️ Device registration already in progress; skipping duplicate")
@@ -75,8 +81,11 @@ enum DeviceRegistration {
         do {
             try await registerWithRetry(payload)
             UserDefaults.standard.set(signature, forKey: lastSentSignatureKey)
+            UserDefaults.standard.removeObject(forKey: lastFailureSignatureKey)
+            UserDefaults.standard.removeObject(forKey: lastFailureAtKey)
             log.info("✅ Device registered with backend")
         } catch {
+            recordFailure(for: signature)
             log.error("❌ Failed to register device with backend: \(String(describing: error), privacy: .public)")
         }
     }
@@ -120,5 +129,18 @@ enum DeviceRegistration {
                 || urlError.code == .dnsLookupFailed
         }
         return false
+    }
+    
+    private static func shouldDelayRetry(for signature: String) -> Bool {
+        let defaults = UserDefaults.standard
+        guard defaults.string(forKey: lastFailureSignatureKey) == signature else { return false }
+        guard let last = defaults.object(forKey: lastFailureAtKey) as? Date else { return false }
+        return Date().timeIntervalSince(last) < 60
+    }
+    
+    private static func recordFailure(for signature: String) {
+        let defaults = UserDefaults.standard
+        defaults.set(signature, forKey: lastFailureSignatureKey)
+        defaults.set(Date(), forKey: lastFailureAtKey)
     }
 }

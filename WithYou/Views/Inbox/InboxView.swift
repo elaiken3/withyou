@@ -26,37 +26,10 @@ struct InboxView: View {
             ZStack {
                 Color.appBackground.ignoresSafeArea()
 
-                List {
-                    if displayedItems.isEmpty {
-                        emptyStateRow
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.appBackground)
-                    } else {
-                        ForEach(isReorderMode ? orderedItems : displayedItems, id: \.id) { item in
-                            if isReorderMode {
-                                InboxRow(item: item)
-                                    .listRowSeparator(.hidden)
-                                    .listRowBackground(Color.appBackground)
-                            } else {
-                                NavigationLink {
-                                    InboxDetailView(item: item)
-                                } label: {
-                                    InboxRow(item: item)
-                                }
-                                .listRowSeparator(.hidden)
-                                .listRowBackground(Color.appBackground)
-                                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                    Button(role: .destructive) {
-                                        Haptics.tap()
-                                        itemPendingDeletion = item
-                                    } label: {
-                                        Label("Not needed", systemImage: "trash")
-                                    }
-                                }
-                            }
-                        }
-                        .onMove(perform: handleMove)
-                    }
+                if isReorderMode {
+                    reorderList
+                } else {
+                    normalList
                 }
                 .environment(\.editMode, $editMode)
                 .environment(\.defaultMinListRowHeight, 44)
@@ -120,6 +93,51 @@ struct InboxView: View {
     }
 
     // MARK: - Display ordering
+    
+    private var normalList: some View {
+        List {
+            if displayedItems.isEmpty {
+                emptyStateRow
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.appBackground)
+            } else {
+                ForEach(displayedItems, id: \.id) { item in
+                    NavigationLink {
+                        InboxDetailView(item: item)
+                    } label: {
+                        InboxRow(item: item)
+                    }
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.appBackground)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button(role: .destructive) {
+                            Haptics.tap()
+                            itemPendingDeletion = item
+                        } label: {
+                            Label("Not needed", systemImage: "trash")
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    private var reorderList: some View {
+        List {
+            if orderedItems.isEmpty {
+                emptyStateRow
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.appBackground)
+            } else {
+                ForEach(orderedItems, id: \.id) { item in
+                    InboxRow(item: item)
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.appBackground)
+                }
+                .onMove(perform: handleMove)
+            }
+        }
+    }
 
     private var displayedItems: [InboxItem] {
         if manualPrioritizationEnabled {
