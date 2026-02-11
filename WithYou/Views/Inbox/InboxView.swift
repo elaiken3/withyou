@@ -26,11 +26,36 @@ struct InboxView: View {
             ZStack {
                 Color.appBackground.ignoresSafeArea()
 
-                Group {
-                    if isReorderMode {
-                        reorderList
+                List {
+                    if currentItems.isEmpty {
+                        emptyStateRow
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.appBackground)
                     } else {
-                        normalList
+                        ForEach(currentItems, id: \.id) { item in
+                            if isReorderMode {
+                                InboxRow(item: item)
+                                    .listRowSeparator(.hidden)
+                                    .listRowBackground(Color.appBackground)
+                            } else {
+                                NavigationLink {
+                                    InboxDetailView(item: item)
+                                } label: {
+                                    InboxRow(item: item)
+                                }
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.appBackground)
+                                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                    Button(role: .destructive) {
+                                        Haptics.tap()
+                                        itemPendingDeletion = item
+                                    } label: {
+                                        Label("Not needed", systemImage: "trash")
+                                    }
+                                }
+                            }
+                        }
+                        .onMove(perform: isReorderMode ? handleMove : nil)
                     }
                 }
                 .environment(\.editMode, $editMode)
@@ -48,11 +73,13 @@ struct InboxView: View {
                         Button(isReorderMode ? "Done" : "Reorder") {
                             Haptics.tap()
                             if !isReorderMode {
+                                // Snapshot the current display order before entering reorder mode
                                 orderedItems = displayedItems
+                                editMode = .active
                             } else {
                                 persistCurrentOrder()
+                                editMode = .inactive
                             }
-                            editMode = isReorderMode ? .inactive : .active
                         }
                         .accessibilityLabel(isReorderMode ? "Finish reordering inbox" : "Reorder inbox")
                     }
@@ -66,7 +93,7 @@ struct InboxView: View {
                         Image(systemName: "plus")
                     }
                     .accessibilityLabel("Quick add to inbox")
-                    .disabled(isReorderMode) // optional: avoids weirdness while dragging
+                    .disabled(isReorderMode)
                 }
             }
             .sheet(isPresented: $showQuickAdd) {
@@ -89,56 +116,17 @@ struct InboxView: View {
                     itemPendingDeletion = nil
                 }
             } message: { _ in
-                Text("You don’t have to do everything.")
+                Text("You don't have to do everything.")
             }
         }
     }
 
     // MARK: - Display ordering
-    
-    private var normalList: some View {
-        List {
-            if displayedItems.isEmpty {
-                emptyStateRow
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.appBackground)
-            } else {
-                ForEach(displayedItems, id: \.id) { item in
-                    NavigationLink {
-                        InboxDetailView(item: item)
-                    } label: {
-                        InboxRow(item: item)
-                    }
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.appBackground)
-                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                        Button(role: .destructive) {
-                            Haptics.tap()
-                            itemPendingDeletion = item
-                        } label: {
-                            Label("Not needed", systemImage: "trash")
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
-    private var reorderList: some View {
-        List {
-            if orderedItems.isEmpty {
-                emptyStateRow
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.appBackground)
-            } else {
-                ForEach(orderedItems, id: \.id) { item in
-                    InboxRow(item: item)
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.appBackground)
-                }
-                .onMove(perform: handleMove)
-            }
-        }
+
+    /// Which items to show: the mutable reorder snapshot when in edit mode,
+    /// otherwise the computed display order from the query.
+    private var currentItems: [InboxItem] {
+        isReorderMode ? orderedItems : displayedItems
     }
 
     private var displayedItems: [InboxItem] {
@@ -158,20 +146,14 @@ struct InboxView: View {
 
     private func handleMove(from source: IndexSet, to destination: Int) {
         guard manualPrioritizationEnabled && isReorderMode else { return }
-        moveItems(from: source, to: destination)
+        orderedItems.move(fromOffsets: source, toOffset: destination)
     }
 
-    private func moveItems(from source: IndexSet, to destination: Int) {
-        var reordered = orderedItems
-        reordered.move(fromOffsets: source, toOffset: destination)
-        orderedItems = reordered
-    }
-    
     private func persistCurrentOrder() {
         for (idx, item) in orderedItems.enumerated() {
             item.sortIndex = idx
         }
-        
+
         do {
             try context.save()
             Haptics.success()
@@ -193,7 +175,7 @@ struct InboxView: View {
                 .font(.headline)
                 .foregroundStyle(.appPrimaryText)
 
-            Text("Captured thoughts land here when there’s no time yet.")
+            Text("Captured thoughts land here when there's no time yet.")
                 .foregroundStyle(.appSecondaryText)
         }
         .padding(.vertical, 12)
@@ -240,5 +222,4 @@ private struct InboxRow: View {
         .shadow(color: .black.opacity(0.03), radius: 8, x: 0, y: 4)
         .padding(.vertical, 1)
     }
-    
 }
