@@ -15,7 +15,7 @@ struct InboxView: View {
     @Query private var items: [InboxItem]
 
     @AppStorage("inboxManualPrioritizationEnabled") private var manualPrioritizationEnabled: Bool = true
-    @State private var isReorderMode = false
+    @State private var editMode: EditMode = .inactive
     @State private var orderedItems: [InboxItem] = []
 
     @State private var showQuickAdd = false
@@ -52,7 +52,7 @@ struct InboxView: View {
                         .onMove(perform: handleMove)
                     }
                 }
-                .environment(\.editMode, .constant(isReorderMode ? .active : .inactive))
+                .environment(\.editMode, $editMode)
                 .environment(\.defaultMinListRowHeight, 44)
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
@@ -70,7 +70,7 @@ struct InboxView: View {
                                 ensureSortIndexesExist()
                                 orderedItems = displayedItems
                             }
-                            isReorderMode.toggle()
+                            editMode = isReorderMode ? .inactive : .active
                         }
                         .accessibilityLabel(isReorderMode ? "Finish reordering inbox" : "Reorder inbox")
                     }
@@ -171,6 +171,10 @@ struct InboxView: View {
             Haptics.error()
             print("❌ Save failed (reorder):", error)
         }
+    }
+
+    private var isReorderMode: Bool {
+        editMode == .active
     }
 
     // MARK: - UI
