@@ -1,6 +1,6 @@
 // WithYou.xcconfig
-WITHYOU_API_BASE_URL = withyou-backend.fly.dev
-WITHYOU_API_KEY =
-
-// Local override must come LAST so it wins
+// Optional local override: WithYou.local.xcconfig (gitignored)
 #include? "WithYou.local.xcconfig"
+
+WITHYOU_API_BASE_URL = withyou-backend.fly.dev
+// WITHYOU_API_KEY is defined in WithYou.local.xcconfig (not committed)
