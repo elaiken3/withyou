@@ -10,7 +10,22 @@ import UserNotifications
 import OSLog
 
 enum DeviceRegistration {
+    private actor RegistrationGate {
+        private var inFlight = false
+
+        func begin() -> Bool {
+            guard !inFlight else { return false }
+            inFlight = true
+            return true
+        }
+
+        func end() {
+            inFlight = false
+        }
+    }
+
     private static let log = Logger(subsystem: "com.commongenelabs.WithYou", category: "push")
+    private static let gate = RegistrationGate()
 
     private static let tokenKey = "withyou.apns_token"
     private static let lastSentSignatureKey = "withyou.apns_last_sent_signature"
@@ -39,6 +54,14 @@ enum DeviceRegistration {
         if !force, signature == lastSignature {
             log.info("ℹ️ Device registration unchanged; skipping")
             return
+        }
+        
+        guard await gate.begin() else {
+            log.info("ℹ️ Device registration already in progress; skipping duplicate")
+            return
+        }
+        defer {
+            Task { await gate.end() }
         }
 
         let payload = DeviceRegisterPayload(

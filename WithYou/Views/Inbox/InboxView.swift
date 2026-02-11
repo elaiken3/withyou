@@ -32,7 +32,7 @@ struct InboxView: View {
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.appBackground)
                     } else {
-                        ForEach(isReorderMode ? orderedItems : displayedItems) { item in
+                        ForEach(isReorderMode ? orderedItems : displayedItems, id: \.id) { item in
                             if isReorderMode {
                                 InboxRow(item: item)
                                     .listRowSeparator(.hidden)
@@ -73,7 +73,6 @@ struct InboxView: View {
                         Button(isReorderMode ? "Done" : "Reorder") {
                             Haptics.tap()
                             if !isReorderMode {
-                                ensureSortIndexesExist()
                                 orderedItems = displayedItems
                             } else {
                                 persistCurrentOrder()
@@ -137,27 +136,6 @@ struct InboxView: View {
         }
     }
 
-    private func ensureSortIndexesExist() {
-        // Assign indices only for items that don't have them yet.
-        // This makes reordering stable the first time a user opts in.
-        var didChange = false
-
-        for (idx, item) in displayedItems.enumerated() {
-            if item.sortIndex == nil {
-                item.sortIndex = idx
-                didChange = true
-            }
-        }
-
-        guard didChange else { return }
-
-        do {
-            try context.save()
-        } catch {
-            print("❌ Save failed (ensureSortIndexesExist):", error)
-        }
-    }
-    
     private func handleMove(from source: IndexSet, to destination: Int) {
         guard manualPrioritizationEnabled && isReorderMode else { return }
         moveItems(from: source, to: destination)
