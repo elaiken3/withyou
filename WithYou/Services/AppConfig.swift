@@ -31,15 +31,25 @@ enum AppConfig {
     private static func normalizedURL(from raw: String) -> URL? {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
+        let lower = trimmed.lowercased()
+
+        // xcconfig treats // as comment, so "https://host" can collapse to "https:".
+        if lower == "https:" || lower == "http:" {
+            return nil
+        }
 
         let withScheme: String
-        if trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://") {
+        if lower.hasPrefix("http://") || lower.hasPrefix("https://") {
             withScheme = trimmed
         } else {
             withScheme = "https://\(trimmed)"
         }
 
         guard let url = URL(string: withScheme), url.host != nil else {
+            return nil
+        }
+
+        if let host = url.host?.lowercased(), host == "https" || host == "http" {
             return nil
         }
         return url

@@ -33,19 +33,25 @@ struct InboxView: View {
                             .listRowBackground(Color.appBackground)
                     } else {
                         ForEach(isReorderMode ? orderedItems : displayedItems) { item in
-                            NavigationLink {
-                                InboxDetailView(item: item)
-                            } label: {
+                            if isReorderMode {
                                 InboxRow(item: item)
-                            }
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.appBackground)
-                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                Button(role: .destructive) {
-                                    Haptics.tap()
-                                    itemPendingDeletion = item
+                                    .listRowSeparator(.hidden)
+                                    .listRowBackground(Color.appBackground)
+                            } else {
+                                NavigationLink {
+                                    InboxDetailView(item: item)
                                 } label: {
-                                    Label("Not needed", systemImage: "trash")
+                                    InboxRow(item: item)
+                                }
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.appBackground)
+                                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                    Button(role: .destructive) {
+                                        Haptics.tap()
+                                        itemPendingDeletion = item
+                                    } label: {
+                                        Label("Not needed", systemImage: "trash")
+                                    }
                                 }
                             }
                         }
