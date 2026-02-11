@@ -16,6 +16,7 @@ struct InboxView: View {
 
     @AppStorage("inboxManualPrioritizationEnabled") private var manualPrioritizationEnabled: Bool = true
     @State private var isReorderMode = false
+    @State private var orderedItems: [InboxItem] = []
 
     @State private var showQuickAdd = false
     @State private var itemPendingDeletion: InboxItem?
@@ -31,7 +32,7 @@ struct InboxView: View {
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.appBackground)
                     } else {
-                        ForEach(displayedItems) { item in
+                        ForEach(isReorderMode ? orderedItems : displayedItems) { item in
                             NavigationLink {
                                 InboxDetailView(item: item)
                             } label: {
@@ -67,6 +68,7 @@ struct InboxView: View {
                             Haptics.tap()
                             if !isReorderMode {
                                 ensureSortIndexesExist()
+                                orderedItems = displayedItems
                             }
                             isReorderMode.toggle()
                         }
@@ -154,8 +156,9 @@ struct InboxView: View {
     }
 
     private func moveItems(from source: IndexSet, to destination: Int) {
-        var reordered = displayedItems
+        var reordered = orderedItems
         reordered.move(fromOffsets: source, toOffset: destination)
+        orderedItems = reordered
 
         for (idx, item) in reordered.enumerated() {
             item.sortIndex = idx
