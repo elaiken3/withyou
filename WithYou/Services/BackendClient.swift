@@ -17,6 +17,17 @@ struct DeviceRegisterPayload: Encodable {
 
 enum BackendClient {
     static let baseURL = AppConfig.apiBaseURL
+    
+    enum HTTPError: Error, LocalizedError {
+        case status(Int, String)
+        
+        var errorDescription: String? {
+            switch self {
+            case let .status(code, body):
+                return "HTTP \(code): \(body)"
+            }
+        }
+    }
 
     static func registerDevice(_ payload: DeviceRegisterPayload) async throws {
         let url = baseURL.appendingPathComponent("/v1/devices/register")
@@ -28,9 +39,13 @@ enum BackendClient {
         }
         request.httpBody = try JSONEncoder().encode(payload)
 
-        let (_, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
             throw URLError(.badServerResponse)
+        }
+        guard (200...299).contains(http.statusCode) else {
+            let body = String(data: data, encoding: .utf8) ?? "<empty>"
+            throw HTTPError.status(http.statusCode, body)
         }
     }
 }

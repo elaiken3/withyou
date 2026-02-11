@@ -68,6 +68,9 @@ enum DeviceRegistration {
                 return
             } catch {
                 lastError = error
+                if !isRetryable(error) {
+                    throw error
+                }
                 log.error("⚠️ Device register failed (attempt \(idx + 1), retrying): \(String(describing: error), privacy: .public)")
                 try? await Task.sleep(nanoseconds: delay)
             }
@@ -76,5 +79,23 @@ enum DeviceRegistration {
         if let lastError {
             throw lastError
         }
+    }
+    
+    private static func isRetryable(_ error: Error) -> Bool {
+        if let httpError = error as? BackendClient.HTTPError {
+            switch httpError {
+            case let .status(code, _):
+                return code == 429 || code >= 500
+            }
+        }
+        if let urlError = error as? URLError {
+            return urlError.code == .timedOut
+                || urlError.code == .cannotFindHost
+                || urlError.code == .cannotConnectToHost
+                || urlError.code == .networkConnectionLost
+                || urlError.code == .notConnectedToInternet
+                || urlError.code == .dnsLookupFailed
+        }
+        return false
     }
 }
