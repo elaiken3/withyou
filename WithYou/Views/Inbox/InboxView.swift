@@ -33,27 +33,7 @@ struct InboxView: View {
                             .listRowBackground(Color.appBackground)
                     } else {
                         ForEach(currentItems, id: \.id) { item in
-                            if isReorderMode {
-                                InboxRow(item: item)
-                                    .listRowSeparator(.hidden)
-                                    .listRowBackground(Color.appBackground)
-                            } else {
-                                NavigationLink {
-                                    InboxDetailView(item: item)
-                                } label: {
-                                    InboxRow(item: item)
-                                }
-                                .listRowSeparator(.hidden)
-                                .listRowBackground(Color.appBackground)
-                                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                    Button(role: .destructive) {
-                                        Haptics.tap()
-                                        itemPendingDeletion = item
-                                    } label: {
-                                        Label("Not needed", systemImage: "trash")
-                                    }
-                                }
-                            }
+                            rowContent(for: item)
                         }
                         .onMove(perform: isReorderMode ? handleMove : nil)
                     }
@@ -127,6 +107,31 @@ struct InboxView: View {
     /// otherwise the computed display order from the query.
     private var currentItems: [InboxItem] {
         isReorderMode ? orderedItems : displayedItems
+    }
+
+    @ViewBuilder
+    private func rowContent(for item: InboxItem) -> some View {
+        if isReorderMode {
+            InboxRow(item: item)
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.appBackground)
+        } else {
+            NavigationLink {
+                InboxDetailView(item: item)
+            } label: {
+                InboxRow(item: item)
+            }
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.appBackground)
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                Button(role: .destructive) {
+                    Haptics.tap()
+                    itemPendingDeletion = item
+                } label: {
+                    Label("Not needed", systemImage: "trash")
+                }
+            }
+        }
     }
 
     private var displayedItems: [InboxItem] {
