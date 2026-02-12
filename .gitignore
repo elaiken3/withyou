@@ -70,7 +70,7 @@ fastlane/test_output/
 .env
 *.env
 WithYou/Config/WithYou.local.xcconfig
-*/Secrets.swift
+WithYou/Config/Secrets.swift
 
 # ----------------------------
 # macOS
