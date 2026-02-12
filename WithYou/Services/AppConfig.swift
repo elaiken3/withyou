@@ -17,7 +17,7 @@ enum AppConfig {
     }()
 
     static let apiKey: String? = {
-        infoValue("WITHYOU_API_KEY")
+        return Secrets.apiKey
     }()
 
     private static func infoValue(_ key: String) -> String? {

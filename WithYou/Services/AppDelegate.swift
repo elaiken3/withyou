@@ -17,6 +17,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         log.info("✅ AppDelegate didFinishLaunching")
+        print("🔑 API Key: \(AppConfig.apiKey ?? "nil")")
+        print("🌐 Base URL: \(AppConfig.apiBaseURL)")
+        print("🔑 Raw plist value: \(Bundle.main.object(forInfoDictionaryKey: "WITHYOU_API_KEY") ?? "NOT FOUND")")
         UNUserNotificationCenter.current().delegate = self
 
         Task { @MainActor in

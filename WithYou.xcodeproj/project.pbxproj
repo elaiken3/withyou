@@ -43,11 +43,20 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		6214BF062F3CED06002B6888 /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				A4A83592C7294DE698FE6261 /* WithYou.xcconfig */,
+			);
+			name = "Recovered References";
+			sourceTree = "<group>";
+		};
 		623411582EFCE13800FB66E3 = {
 			isa = PBXGroup;
 			children = (
 				623411632EFCE13800FB66E3 /* WithYou */,
 				623411622EFCE13800FB66E3 /* Products */,
+				6214BF062F3CED06002B6888 /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
@@ -260,7 +269,7 @@
 			};
 			name = Release;
 		};
-6234116D2EFCE13A00FB66E3 /* Debug */ = {
+		6234116D2EFCE13A00FB66E3 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = A4A83592C7294DE698FE6261 /* WithYou.xcconfig */;
 			buildSettings = {
@@ -298,7 +307,7 @@
 			};
 			name = Debug;
 		};
-6234116E2EFCE13A00FB66E3 /* Release */ = {
+		6234116E2EFCE13A00FB66E3 /* Release */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = A4A83592C7294DE698FE6261 /* WithYou.xcconfig */;
 			buildSettings = {
