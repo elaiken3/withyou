@@ -1,6 +1,11 @@
 // WithYou.xcconfig
+//
+// Optional cloud AI (Supabase). Empty values build an app without cloud AI; Settings then
+// says it isn't set up. Put real values in WithYou.local.xcconfig (gitignored), which is
+// included below so it overrides these. Use the host only, e.g. abcd.supabase.co,
+// because "//" starts a comment in xcconfig files.
+WITHYOU_SUPABASE_HOST =
+WITHYOU_SUPABASE_ANON_KEY =
+
 // Optional local override: WithYou.local.xcconfig (gitignored)
 #include? "WithYou.local.xcconfig"
-
-WITHYOU_API_BASE_URL = withyou-backend.fly.dev
-// WITHYOU_API_KEY is defined in WithYou.local.xcconfig (not committed)

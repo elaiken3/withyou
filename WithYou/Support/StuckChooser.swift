@@ -8,7 +8,8 @@
 import Foundation
 import SwiftData
 
-struct StuckSuggestion {
+/// One thing to start on. (Named so it doesn't clash with the AI coach's `StuckSuggestion`.)
+struct StuckCandidate {
     enum Source { case activeFocus, reminder, inbox }
 
     let source: Source
@@ -32,9 +33,9 @@ enum StuckChooser {
         inboxItems: [InboxItem],
         startingReminderId: UUID? = nil,
         now: Date = Date()
-    ) -> [StuckSuggestion] {
+    ) -> [StuckCandidate] {
 
-        var out: [StuckSuggestion] = []
+        var out: [StuckCandidate] = []
 
         // A) The reminder the person asked for help with ("Help me start") comes first.
         var startingId: UUID?
@@ -47,7 +48,7 @@ enum StuckChooser {
         // B) An active focus session is the next best thing to return to.
         if let active = focusSessions.first(where: { $0.isActive && $0.endedAt == nil }) {
             out.append(
-                StuckSuggestion(
+                StuckCandidate(
                     source: .activeFocus,
                     title: active.focusTitle,
                     startStep: normalizeStartStep(active.focusStartStep, fallbackTitle: active.focusTitle),
@@ -83,8 +84,8 @@ enum StuckChooser {
         return out
     }
 
-    private static func reminderSuggestion(_ reminder: VerboseReminder) -> StuckSuggestion {
-        StuckSuggestion(
+    private static func reminderSuggestion(_ reminder: VerboseReminder) -> StuckCandidate {
+        StuckCandidate(
             source: .reminder,
             title: reminder.title,
             startStep: normalizeStartStep(reminder.startStep, fallbackTitle: reminder.title),
@@ -95,8 +96,8 @@ enum StuckChooser {
         )
     }
 
-    private static func inboxSuggestion(_ item: InboxItem) -> StuckSuggestion {
-        StuckSuggestion(
+    private static func inboxSuggestion(_ item: InboxItem) -> StuckCandidate {
+        StuckCandidate(
             source: .inbox,
             title: item.title,
             startStep: normalizeStartStep(item.startStep, fallbackTitle: item.title),

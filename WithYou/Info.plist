@@ -2,11 +2,24 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>WITHYOU_API_BASE_URL</key>
-	<string>$(WITHYOU_API_BASE_URL)</string>
-	<key>UIBackgroundModes</key>
+	<key>CFBundleURLTypes</key>
 	<array>
-		<string>remote-notification</string>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.commongenelabs.WithYou</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>withyou</string>
+			</array>
+		</dict>
 	</array>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>WithYou listens only while voice capture is on, to turn what you say into notes.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>WithYou turns what you say into text so you can capture thoughts hands-free. When your iPhone supports it, this happens on the device.</string>
+	<key>WITHYOU_SUPABASE_ANON_KEY</key>
+	<string>$(WITHYOU_SUPABASE_ANON_KEY)</string>
+	<key>WITHYOU_SUPABASE_HOST</key>
+	<string>$(WITHYOU_SUPABASE_HOST)</string>
 </dict>
 </plist>

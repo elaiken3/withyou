@@ -22,7 +22,7 @@ struct InboxDetailView: View {
     /// Set just before the item is deleted, so the body never reads a deleted model
     /// while the screen pops back to the Inbox.
     @State private var isGone = false
-    @State private var isMakingSmaller = false
+    @State private var isBreakingDown = false
     @State private var toast: Toast?
 
     var body: some View {
@@ -33,6 +33,20 @@ struct InboxDetailView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         summaryCard
+
+                        if isBreakingDown {
+                            BreakDownView(
+                                title: item.title,
+                                currentStep: item.startStep,
+                                onPick: { step, index in
+                                    useFirstStep(step, at: index)
+                                },
+                                onClose: {
+                                    isBreakingDown = false
+                                }
+                            )
+                            .cardStyle()
+                        }
 
                         if let original = originalText {
                             originalCard(original)
@@ -143,22 +157,15 @@ struct InboxDetailView: View {
             .buttonStyle(.borderedProminent)
 
             Button {
-                makeSmaller()
+                Haptics.tap()
+                isBreakingDown = true
             } label: {
-                HStack(spacing: 8) {
-                    if isMakingSmaller {
-                        ProgressView()
-                    } else {
-                        Image(systemName: "scissors")
-                            .accessibilityHidden(true)
-                    }
-                    Text(isMakingSmaller ? "Finding a smaller step…" : "Make it smaller")
-                }
-                .frame(maxWidth: .infinity)
+                Label("Break it down", systemImage: "list.number")
+                    .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
-            .disabled(isMakingSmaller)
-            .accessibilityHint("Suggests a tinier first step")
+            .disabled(isBreakingDown)
+            .accessibilityHint("Shows a few tiny steps to pick from")
 
             Button {
                 complete()
@@ -184,39 +191,33 @@ struct InboxDetailView: View {
 
     // MARK: - Actions
 
-    private func makeSmaller() {
-        guard !isMakingSmaller else { return }
-        Haptics.tap()
-        isMakingSmaller = true
+    /// A step picked from "Break it down" becomes the first step, with Undo.
+    private func useFirstStep(_ step: String, at index: Int) {
+        isBreakingDown = false
 
         let itemId = item.id
-        let title = item.title
-        let previousStep = item.startStep
-        let previousEstimate = item.estimateMinutes
+        // The item may have been let go elsewhere while the steps were showing.
+        guard !isLeaving, let current = fetchItem(id: itemId) else { return }
+        let previousStep = current.startStep
+        let previousEstimate = current.estimateMinutes
+        let change = BreakDownChoice.change(picking: step, at: index, previousEstimate: previousEstimate)
 
-        Task {
-            let step = await SmallStepSuggester.smallerStep(for: title, current: previousStep)
-            isMakingSmaller = false
+        current.startStep = change.startStep
+        current.estimateMinutes = change.estimateMinutes
 
-            // The item may have been let go elsewhere while the suggestion was coming.
-            guard let current = fetchItem(id: itemId) else { return }
-            current.startStep = step
-            current.estimateMinutes = max(1, min(previousEstimate, 2))
-
-            do {
-                try context.save()
-                Haptics.success()
-                toast = Toast(text: "Smaller first step saved.", actionTitle: "Undo", action: {
-                    guard let again = fetchItem(id: itemId) else { return }
-                    again.startStep = previousStep
-                    again.estimateMinutes = previousEstimate
-                    try? context.save()
-                })
-            } catch {
-                Haptics.error()
-                print("❌ Save failed (makeSmaller):", error)
-                toast = Toast(text: "Couldn’t save that just now.")
-            }
+        do {
+            try context.save()
+            Haptics.success()
+            toast = Toast(text: "New first step saved.", actionTitle: "Undo", action: {
+                guard let again = fetchItem(id: itemId) else { return }
+                again.startStep = previousStep
+                again.estimateMinutes = previousEstimate
+                try? context.save()
+            })
+        } catch {
+            Haptics.error()
+            print("❌ Save failed (useFirstStep):", error)
+            toast = Toast(text: "Couldn’t save that just now.")
         }
     }
 

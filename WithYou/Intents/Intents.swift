@@ -9,14 +9,19 @@ import Foundation
 import AppIntents
 import SwiftData
 
+/// "Capture in WithYou": Siri takes down what the person says and saves it straight away
+/// (they asked Siri to save it), then says exactly what it saved.
 struct CaptureInWithYouIntent: AppIntent {
     static var title: LocalizedStringResource = "Capture"
-    static var description = IntentDescription("Capture a thought into Inbox, or schedule it if a time is mentioned.")
+    static var description = IntentDescription("Capture a thought, or a few, into your Inbox. Anything with a time is scheduled.")
 
     @Parameter(title: "What should I capture?")
     var content: String
 
     static var openAppWhenRun: Bool = false
+
+    /// Siri is waiting, so AI gets this long before the simple rules take over.
+    static let aiDeadlineSeconds: Double = 8
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
@@ -35,30 +40,16 @@ struct CaptureInWithYouIntent: AppIntent {
             return .result(dialog: "Parked. Keep focusing.")
         }
 
-        let parser = CaptureParser()
-        let parsed = parser.parse(content, profile: profile)
-
-        if let when = parsed.scheduledAt {
-            _ = try await ReminderStore.createAndSchedule(
-                title: parsed.title,
-                startStep: parsed.startStep,
-                estimateMinutes: parsed.estimateMinutes,
-                scheduledAt: when,
-                in: context
-            )
-            return .result(dialog: "Scheduled for \(when.friendlyDayTime).")
-        }
-
-        let inbox = InboxItem(
-            content: content,
-            title: parsed.title,
-            source: .siri,
-            startStep: parsed.startStep,
-            estimateMinutes: parsed.estimateMinutes
+        // AI may split "call mom and buy milk" into two items, and picks up times.
+        // Without AI (or when it's slow) the rules read it as one item, as before.
+        let suggestions = await CaptureSaver.suggestions(
+            for: content,
+            profile: profile,
+            within: Self.aiDeadlineSeconds
         )
-        context.insert(inbox)
-        try context.save()
-        return .result(dialog: "Saved. It’s in your Inbox.")
+        let summary = try await CaptureSaver.save(suggestions, source: .siri, in: context)
+        let message = CaptureSaver.message(for: summary)
+        return .result(dialog: "\(message)")
     }
 }
 
@@ -75,6 +66,17 @@ struct WithYouShortcuts: AppShortcutsProvider {
             ],
             shortTitle: "Capture",
             systemImageName: "mic.fill"
+        )
+        // Opens straight into voice capture. Can be put on the Action Button in Settings.
+        AppShortcut(
+            intent: VoiceCaptureIntent(),
+            phrases: [
+                "Voice capture in \(.applicationName)",
+                "Brain dump in \(.applicationName)",
+                "Talk it out with \(.applicationName)"
+            ],
+            shortTitle: "Voice capture",
+            systemImageName: "waveform"
         )
         AppShortcut(
             intent: StartFocusIntent(),

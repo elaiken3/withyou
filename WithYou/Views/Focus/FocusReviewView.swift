@@ -5,6 +5,7 @@
 //  Created by Eugene Aiken on 12/24/25.
 //
 
+import Foundation
 import SwiftUI
 import SwiftData
 
@@ -19,6 +20,11 @@ struct FocusReviewView: View {
     @State private var toast: Toast?
     /// Thoughts being scheduled right now (the reminder is created asynchronously).
     @State private var schedulingIds: Set<UUID> = []
+    /// AI-tidied titles and first steps, by thought id. Used when a thought moves on;
+    /// the original words stay in the Inbox item's `content`.
+    @State private var tidied: [UUID: TidyItem] = [:]
+    @State private var tidySource: AISource = .rules
+    @State private var isTidying = false
 
     private let parser = CaptureParser()
 
@@ -52,6 +58,7 @@ struct FocusReviewView: View {
                             Text("Decide now, or leave them for later.")
                                 .font(.subheadline)
                                 .foregroundStyle(.appSecondaryText)
+                            tidyStatus
                         }
 
                         LazyVStack(spacing: 12) {
@@ -90,6 +97,11 @@ struct FocusReviewView: View {
         .navigationTitle("Wrap up")
         .tint(.appAccent)
         .toast($toast)
+        // Tidies new thoughts in the background (again after an Undo brings one back).
+        // Nothing waits on it: a thought that moves on before it's ready uses the parser.
+        .task(id: dumpItems.map { $0.id }) {
+            await tidyThoughts()
+        }
     }
 
     // MARK: - Pieces
@@ -113,6 +125,22 @@ struct FocusReviewView: View {
         return "Stopping is allowed. Your task is still where you left it."
     }
 
+    @ViewBuilder
+    private var tidyStatus: some View {
+        if isTidying {
+            HStack(spacing: 6) {
+                ProgressView()
+                    .controlSize(.small)
+                Text("Tidying titles…")
+                    .font(.footnote)
+                    .foregroundStyle(.appSecondaryText)
+            }
+            .accessibilityElement(children: .combine)
+        } else if !tidied.isEmpty {
+            AIAttributionLabel(source: tidySource)
+        }
+    }
+
     private func thoughtRow(_ item: FocusDumpItem) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(item.text)
@@ -120,6 +148,18 @@ struct FocusReviewView: View {
                 .foregroundStyle(.appPrimaryText)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
+
+            if let tidy = tidied[item.id] {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Saves as “\(tidy.title)”")
+                    Text("Start: \(tidy.firstStep)")
+                }
+                .font(.footnote)
+                .foregroundStyle(.appSecondaryText)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityElement(children: .combine)
+            }
 
             if schedulingIds.contains(item.id) {
                 ProgressView()
@@ -184,13 +224,37 @@ struct FocusReviewView: View {
             CompletionStore.endWithoutCompleting(session, in: context)
         }
 
-        CompletionStore.moveLeftoverThoughtsToInbox(for: session, in: context)
+        CompletionStore.moveLeftoverThoughtsToInbox(for: session, tidied: tidied, in: context)
         Haptics.success()
         onDone()
     }
 
+    /// Asks AI for a short title and first step for each thought not tidied yet. Only used
+    /// when Apple Intelligence or cloud AI can help: the rules would just repeat the thought,
+    /// and the parser already does better than that.
+    private func tidyThoughts() async {
+        let pending = dumpItems.filter { tidied[$0.id] == nil }
+        guard !pending.isEmpty, AIService.isOnDeviceAvailable || AIService.isCloudEnabled else {
+            isTidying = false
+            return
+        }
+
+        isTidying = true
+        let ids = pending.map { $0.id }
+        let result = await AIService.tidy(pending.map { $0.text })
+        // The thoughts changed or the screen closed; a newer run takes over.
+        guard !Task.isCancelled else { return }
+        isTidying = false
+
+        guard result.source != .rules, result.value.count == ids.count else { return }
+        for (id, item) in zip(ids, result.value) {
+            tidied[id] = item
+        }
+        tidySource = result.source
+    }
+
     private func sendToInbox(_ item: FocusDumpItem) {
-        CompletionStore.moveThoughtsToInbox([item], in: context)
+        CompletionStore.moveThoughtsToInbox([item], tidied: tidied, in: context)
 
         do {
             try context.save()
@@ -226,6 +290,7 @@ struct FocusReviewView: View {
 
         let profile = ProfileStore.activeProfile(in: context)
         let parsed = parser.parse(item.text, profile: profile)
+        let fields = CompletionStore.inboxFields(parsed: parsed, tidy: tidied[itemId])
 
         // Use a time mentioned in the thought ("call Sam at 4pm") if it is still ahead;
         // otherwise tomorrow morning.
@@ -241,9 +306,9 @@ struct FocusReviewView: View {
         Task {
             do {
                 _ = try await ReminderStore.createAndSchedule(
-                    title: parsed.title,
-                    startStep: parsed.startStep,
-                    estimateMinutes: parsed.estimateMinutes,
+                    title: fields.title,
+                    startStep: fields.startStep,
+                    estimateMinutes: fields.estimateMinutes,
                     scheduledAt: when,
                     in: context
                 )

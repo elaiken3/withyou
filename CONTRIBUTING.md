@@ -77,7 +77,9 @@ Preferred language:
 
 - SwiftUI + SwiftData
 - iOS 17.6+, built with Xcode 26 (newer APIs behind `#available`)
-- Create `WithYou/Config/Secrets.swift` before building (see README → Development). Never commit it.
+- A fresh clone builds with no setup. Optional cloud AI values go in `WithYou/Config/WithYou.local.xcconfig` (see README → Development); never commit it, and never put server or Anthropic keys in the app. `Secrets.swift` is no longer used.
+- AI features go through `AIService`, which always falls back to simple rules. AI suggests; the person confirms before anything changes.
+- Notifications are local only (no push registration). Schedule through `ReminderStore` / `FocusSessionStore` / `DailyCheckIn`.
 - Create, reschedule and start things through `ReminderStore` / `FocusSessionStore` so notifications stay in sync
 - Voice-first friendly where possible
 - Accessibility labels are expected

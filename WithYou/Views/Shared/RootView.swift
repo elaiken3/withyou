@@ -16,6 +16,10 @@ struct RootView: View {
 
     @State private var selectedTab: AppTab = .today
     @State private var showRefocus = false
+    @State private var showVoiceCapture = false
+    /// What the last voice capture saved; shown as a toast once its sheet has closed.
+    @State private var voiceSaveSummary: CaptureSaveSummary?
+    @State private var toast: Toast?
     @State private var showWelcome = false
     @State private var didRunLaunchSetup = false
 
@@ -49,6 +53,18 @@ struct RootView: View {
         .sheet(isPresented: $showRefocus) {
             RefocusView()
         }
+        .sheet(isPresented: $showVoiceCapture, onDismiss: showVoiceSaveToast) {
+            VoiceCaptureView { summary in
+                voiceSaveSummary = summary
+            }
+        }
+        // Sits above the tab bar. Only the toast itself takes touches.
+        .overlay(alignment: .bottom) {
+            Color.clear
+                .allowsHitTesting(false)
+                .toast($toast)
+                .padding(.bottom, 60)
+        }
         .fullScreenCover(isPresented: $showWelcome, onDismiss: {
             // Anything that arrived while the welcome was up (e.g. a Siri shortcut).
             handle(router.pendingRoute)
@@ -65,6 +81,10 @@ struct RootView: View {
         }
         .onChange(of: router.pendingRoute) { _, route in
             handle(route)
+        }
+        // `withyou://voice` and friends (the `withyou` scheme is registered in Info.plist).
+        .onOpenURL { url in
+            router.open(deepLink: url.absoluteString)
         }
     }
 
@@ -137,11 +157,44 @@ struct RootView: View {
         case .startFocus(let reminderId):
             router.consume()
             startFocus(forReminder: reminderId)
+        case .voiceCapture:
+            router.consume()
+            presentVoiceCapture()
         case .stuck, .reminder:
             // TodayView presents the sheet and consumes the route.
             selectedTab = .today
         }
     }
+
+    // MARK: - Voice capture
+
+    private func presentVoiceCapture() {
+        guard !showVoiceCapture else { return }
+        // One sheet at a time: let Refocus close first.
+        guard showRefocus else {
+            showVoiceCapture = true
+            return
+        }
+        showRefocus = false
+        Task {
+            try? await Task.sleep(for: .milliseconds(500))
+            showVoiceCapture = true
+        }
+    }
+
+    private func showVoiceSaveToast() {
+        guard let summary = voiceSaveSummary else { return }
+        voiceSaveSummary = nil
+        toast = Toast(
+            text: CaptureSaver.message(for: summary),
+            actionTitle: "Undo",
+            action: {
+                CaptureSaver.undo(summary, in: context)
+            }
+        )
+    }
+
+    // MARK: - Focus
 
     private func startFocus(forReminder reminderId: UUID) {
         let descriptor = FetchDescriptor<VerboseReminder>(

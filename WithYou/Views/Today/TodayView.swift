@@ -44,7 +44,10 @@ struct TodayView: View {
     @State private var schedulingInboxItem: InboxItem?
     @State private var editingReminder: VerboseReminder?
     @State private var editingInboxItem: InboxItem?
-    @State private var shrinkingItemId: UUID?
+    /// The Inbox item whose "Break it down" steps are showing.
+    @State private var breakingDownItemId: UUID?
+    /// "Help me pick" is showing its suggestion card.
+    @State private var isPicking = false
 
     /// "Not now" / "Ask later" hide a reminder for this long.
     private static let restInterval: TimeInterval = 90 * 60
@@ -99,6 +102,7 @@ struct TodayView: View {
                         // RIGHT NOW (one card)
                         SectionHeader(title: "Right now")
                         rightNowCard(state)
+                        helpMePick(state)
 
                         // OPTIONAL
                         energySection(state)
@@ -198,6 +202,8 @@ struct TodayView: View {
     private struct TodayState {
         let profile: UserProfile?
         let energy: EnergyLevel
+        /// The energy the person actually picked today; nil when they didn't (AI gets nil).
+        let checkedInEnergy: EnergyLevel?
         let orderedInbox: [InboxItem]
         let activeSession: FocusSession?
         let missed: VerboseReminder?
@@ -207,6 +213,8 @@ struct TodayView: View {
         let unfinishedToday: [VerboseReminder]
         let canLetTodayRest: Bool
         let completedToday: [FocusSession]
+        /// What "Help me pick" can choose from: today's upcoming reminders, then the Inbox.
+        let pickCandidates: [PickCandidate]
     }
 
     private func makeState() -> TodayState {
@@ -224,7 +232,8 @@ struct TodayView: View {
         }
 
         let ordered = orderedInbox()
-        let energy = energyLevel(on: current)
+        let checkedInEnergy = EnergyCheckIn.level(raw: energyLevelRaw, day: energyDay, on: current)
+        let energy = checkedInEnergy ?? .okay
         let active = activeSessions.first
 
         // One missed reminder at most (no backlog, no overdue): the most recent one.
@@ -261,9 +270,18 @@ struct TodayView: View {
             .filter { ($0.completedLoggedAt ?? .distantPast) >= startOfToday }
             .sorted { ($0.completedLoggedAt ?? .distantPast) > ($1.completedLoggedAt ?? .distantPast) }
 
+        let pickCandidates = HelpMePick.candidates(
+            inbox: ordered,
+            reminders: reminders,
+            now: current,
+            restInterval: Self.restInterval,
+            calendar: calendar
+        )
+
         return TodayState(
             profile: profile,
             energy: energy,
+            checkedInEnergy: checkedInEnergy,
             orderedInbox: ordered,
             activeSession: active,
             missed: missed,
@@ -272,7 +290,8 @@ struct TodayView: View {
             energyItem: energyItem,
             unfinishedToday: unfinishedToday,
             canLetTodayRest: canLetTodayRest,
-            completedToday: completedToday
+            completedToday: completedToday,
+            pickCandidates: pickCandidates
         )
     }
 
@@ -301,30 +320,11 @@ struct TodayView: View {
 
     // MARK: - Energy check-in
 
-    private enum EnergyLevel: String, CaseIterable, Identifiable {
-        case low, okay, good
-
-        var id: String { rawValue }
-
-        var title: String {
-            switch self {
-            case .low: return "Low"
-            case .okay: return "Okay"
-            case .good: return "Good"
-            }
-        }
-    }
-
-    /// Unset (or set on another day) reads as "Okay". Never required.
-    private func energyLevel(on date: Date) -> EnergyLevel {
-        let today = Calendar.current.startOfDay(for: date).timeIntervalSinceReferenceDate
-        guard energyDay == today, let level = EnergyLevel(rawValue: energyLevelRaw) else { return .okay }
-        return level
-    }
-
+    // Never required. Unset (or set on another day) reads as "Okay" here, and as nothing
+    // for AI requests (see `EnergyCheckIn`).
     private func setEnergy(_ level: EnergyLevel) {
         energyLevelRaw = level.rawValue
-        energyDay = Calendar.current.startOfDay(for: Date()).timeIntervalSinceReferenceDate
+        energyDay = EnergyCheckIn.dayValue(for: Date())
     }
 
     private func energyRow(_ energy: EnergyLevel) -> some View {
@@ -513,22 +513,12 @@ struct TodayView: View {
     }
 
     private func inboxRightNowCard(_ item: InboxItem, profile: UserProfile?) -> some View {
-        let isShrinking = shrinkingItemId == item.id
+        let isBreakingDown = breakingDownItemId == item.id
         return TodayCard(
             title: item.title,
             subtitle: stepLine(item.startStep, minutes: item.estimateMinutes),
             onEdit: { editingInboxItem = item }
         ) {
-            if isShrinking {
-                HStack(spacing: 8) {
-                    ProgressView()
-                    Text("Finding a smaller step…")
-                        .font(.footnote)
-                        .foregroundStyle(.appSecondaryText)
-                }
-                .accessibilityElement(children: .combine)
-            }
-
             ButtonRow {
                 Button {
                     Haptics.tap()
@@ -548,15 +538,65 @@ struct TodayView: View {
 
                 Button {
                     Haptics.tap()
-                    makeSmaller(item)
+                    breakingDownItemId = item.id
                 } label: {
-                    Text("Make it smaller")
+                    Text("Break it down")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
-                .disabled(shrinkingItemId != nil)
+                .disabled(isBreakingDown)
+                .accessibilityHint("Shows a few tiny steps to pick from")
             }
+
+            if isBreakingDown {
+                BreakDownView(
+                    title: item.title,
+                    currentStep: item.startStep,
+                    onPick: { step, index in
+                        useFirstStep(step, at: index, for: item.id)
+                    },
+                    onClose: {
+                        breakingDownItemId = nil
+                    }
+                )
+            }
+        }
+    }
+
+    // MARK: - Help me pick
+
+    /// A quiet offer under Right now when there's a real choice; one suggestion at a time.
+    @ViewBuilder
+    private func helpMePick(_ state: TodayState) -> some View {
+        if isPicking {
+            HelpMePickCard(
+                candidates: state.pickCandidates,
+                energy: state.checkedInEnergy,
+                onStart: { candidate, firstStep in
+                    isPicking = false
+                    startFocus(
+                        title: candidate.next.title,
+                        startStep: firstStep,
+                        sourceKind: candidate.kind,
+                        sourceId: candidate.sourceId,
+                        profile: state.profile
+                    )
+                },
+                onClose: {
+                    isPicking = false
+                }
+            )
+        } else if state.activeSession == nil && HelpMePick.canOffer(state.pickCandidates) {
+            Button {
+                Haptics.tap()
+                isPicking = true
+            } label: {
+                Label("Help me pick", systemImage: "wand.and.stars")
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.borderless)
+            .accessibilityHint("Suggests one thing to do now, from your Inbox and today’s plan")
         }
     }
 
@@ -916,6 +956,8 @@ struct TodayView: View {
             for reminder in items {
                 try ReminderStore.reschedule(reminder, to: target, in: context)
             }
+            // A resting day gets no daily check-in either.
+            DailyCheckIn.letTodayRest()
             Haptics.success()
             let toRestore = previousDates
             toast = Toast(text: "Moved to tomorrow. Rest well.", actionTitle: "Undo", action: {
@@ -923,6 +965,7 @@ struct TodayView: View {
                     guard let stored = fetchReminder(id: id) else { continue }
                     try? ReminderStore.reschedule(stored, to: date, in: context)
                 }
+                DailyCheckIn.undoLetTodayRest()
             })
         } catch {
             Haptics.error()
@@ -933,33 +976,28 @@ struct TodayView: View {
 
     // MARK: - Actions: Inbox
 
-    private func makeSmaller(_ item: InboxItem) {
-        guard shrinkingItemId == nil else { return }
-        let itemId = item.id
-        let title = item.title
-        let oldStep = item.startStep
-        let oldEstimate = item.estimateMinutes
+    /// A step picked from "Break it down" becomes the item's first step, with Undo.
+    private func useFirstStep(_ step: String, at index: Int, for itemId: UUID) {
+        breakingDownItemId = nil
+        guard let stored = fetchInboxItem(id: itemId) else { return }
+        let oldStep = stored.startStep
+        let oldEstimate = stored.estimateMinutes
+        let change = BreakDownChoice.change(picking: step, at: index, previousEstimate: oldEstimate)
 
-        shrinkingItemId = itemId
-        Task {
-            let smaller = await SmallStepSuggester.smallerStep(for: title, current: oldStep)
-            shrinkingItemId = nil
-
-            guard let stored = fetchInboxItem(id: itemId) else { return }
-            stored.startStep = smaller
-            stored.estimateMinutes = 2
-            do {
-                try context.save()
-                toast = Toast(text: "Made it smaller. Starting is enough.", actionTitle: "Undo", action: {
-                    guard let again = fetchInboxItem(id: itemId) else { return }
-                    again.startStep = oldStep
-                    again.estimateMinutes = oldEstimate
-                    try? context.save()
-                })
-            } catch {
-                print("❌ Save failed (makeSmaller):", error)
-                toast = Toast(text: "Couldn’t update that just now. Try again.")
-            }
+        stored.startStep = change.startStep
+        stored.estimateMinutes = change.estimateMinutes
+        do {
+            try context.save()
+            Haptics.success()
+            toast = Toast(text: "New first step. Starting is enough.", actionTitle: "Undo", action: {
+                guard let again = fetchInboxItem(id: itemId) else { return }
+                again.startStep = oldStep
+                again.estimateMinutes = oldEstimate
+                try? context.save()
+            })
+        } catch {
+            print("❌ Save failed (useFirstStep):", error)
+            toast = Toast(text: "Couldn’t update that just now. Try again.")
         }
     }
 

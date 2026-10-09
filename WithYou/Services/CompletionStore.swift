@@ -143,22 +143,51 @@ struct CompletionStore {
 
     // MARK: - Brain-dump thoughts
 
-    /// Turns each thought into an Inbox item (title, first step and estimate come from
-    /// `CaptureParser`) and removes the thought. Does not save.
-    static func moveThoughtsToInbox(_ items: [FocusDumpItem], in context: ModelContext) {
+    /// What a parked thought becomes in the Inbox.
+    struct ThoughtFields: Equatable {
+        var title: String
+        var startStep: String
+        var estimateMinutes: Int
+    }
+
+    /// A tidied title and first step when AI made them (see `FocusReviewView`), otherwise the
+    /// parser's. The estimate always comes from the parser.
+    static func inboxFields(parsed: ParsedCapture, tidy: TidyItem?) -> ThoughtFields {
+        if let tidy {
+            let title = tidy.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            let step = tidy.firstStep.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !title.isEmpty {
+                return ThoughtFields(
+                    title: title,
+                    startStep: step.isEmpty ? parsed.startStep : step,
+                    estimateMinutes: parsed.estimateMinutes
+                )
+            }
+        }
+        return ThoughtFields(title: parsed.title, startStep: parsed.startStep, estimateMinutes: parsed.estimateMinutes)
+    }
+
+    /// Turns each thought into an Inbox item and removes the thought. Does not save.
+    /// The title and first step come from `tidied` (keyed by thought id) when present, else
+    /// from `CaptureParser`; the original words are always kept as the item's `content`.
+    static func moveThoughtsToInbox(
+        _ items: [FocusDumpItem],
+        tidied: [UUID: TidyItem] = [:],
+        in context: ModelContext
+    ) {
         guard !items.isEmpty else { return }
         let parser = CaptureParser()
         let profile = ProfileStore.activeProfile(in: context)
 
         for item in items {
             let text = item.text
-            let parsed = parser.parse(text, profile: profile)
+            let fields = inboxFields(parsed: parser.parse(text, profile: profile), tidy: tidied[item.id])
             let inboxItem = InboxItem(
                 content: text,
-                title: parsed.title,
+                title: fields.title,
                 source: .app,
-                startStep: parsed.startStep,
-                estimateMinutes: parsed.estimateMinutes
+                startStep: fields.startStep,
+                estimateMinutes: fields.estimateMinutes
             )
             context.insert(inboxItem)
             context.delete(item)
@@ -168,7 +197,11 @@ struct CompletionStore {
     /// Moves every thought still parked in `session` to the Inbox and saves.
     /// Returns how many moved.
     @discardableResult
-    static func moveLeftoverThoughtsToInbox(for session: FocusSession, in context: ModelContext) -> Int {
+    static func moveLeftoverThoughtsToInbox(
+        for session: FocusSession,
+        tidied: [UUID: TidyItem] = [:],
+        in context: ModelContext
+    ) -> Int {
         let sessionId = session.id
         let descriptor = FetchDescriptor<FocusDumpItem>(
             predicate: #Predicate<FocusDumpItem> { (item: FocusDumpItem) in
@@ -179,7 +212,7 @@ struct CompletionStore {
         let items = (try? context.fetch(descriptor)) ?? []
         guard !items.isEmpty else { return 0 }
 
-        moveThoughtsToInbox(items, in: context)
+        moveThoughtsToInbox(items, tidied: tidied, in: context)
         do {
             try context.save()
         } catch {

@@ -7,35 +7,40 @@
 
 import Foundation
 
+/// Build-time settings read from Info.plist (filled in from `Config/WithYou.xcconfig`).
 enum AppConfig {
-    static let apiBaseURL: URL = {
-        if let raw = infoValue("WITHYOU_API_BASE_URL"),
-           let url = normalizedURL(from: raw) {
-            return url
-        }
-        return URL(string: "https://withyou-backend.fly.dev")!
-    }()
+    /// `https://<project>.supabase.co` for optional cloud AI, or nil when it isn't set up.
+    ///
+    /// Info.plist holds the host only (`WITHYOU_SUPABASE_HOST`), because `//` starts a
+    /// comment in xcconfig files.
+    static let supabaseBaseURL: URL? = supabaseURL(fromHost: infoValue("WITHYOU_SUPABASE_HOST"))
 
-    /// The backend API key, or nil when none is configured.
-    /// CI builds use a stub `Secrets.swift` with `apiKey = ""`, which must not send an empty header.
-    static let apiKey: String? = {
-        let trimmed = Secrets.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-    }()
+    /// The Supabase publishable (anon) key, or nil when it isn't set up.
+    static let supabaseAnonKey: String? = infoValue("WITHYOU_SUPABASE_ANON_KEY")
 
-    private static func infoValue(_ key: String) -> String? {
-        guard let raw = Bundle.main.object(forInfoDictionaryKey: key) as? String else {
-            return nil
-        }
+    /// `https://<host>` from a configured host, or nil for anything unusable.
+    static func supabaseURL(fromHost raw: String?) -> URL? {
+        guard let raw = cleanedValue(raw) else { return nil }
+        return normalizedURL(from: raw)
+    }
+
+    /// A configured value without surrounding quotes or whitespace. Nil when it is empty or
+    /// still an unresolved build setting such as `$(WITHYOU_SUPABASE_HOST)`.
+    static func cleanedValue(_ raw: String?) -> String? {
+        guard let raw else { return nil }
         var trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if (trimmed.hasPrefix("\"") && trimmed.hasSuffix("\""))
-            || (trimmed.hasPrefix("'") && trimmed.hasSuffix("'")) {
+        if (trimmed.hasPrefix("\"") && trimmed.hasSuffix("\"") && trimmed.count >= 2)
+            || (trimmed.hasPrefix("'") && trimmed.hasSuffix("'") && trimmed.count >= 2) {
             trimmed = String(trimmed.dropFirst().dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
         }
         if trimmed.hasPrefix("$(") && trimmed.hasSuffix(")") {
             return nil
         }
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func infoValue(_ key: String) -> String? {
+        cleanedValue(Bundle.main.object(forInfoDictionaryKey: key) as? String)
     }
 
     private static func normalizedURL(from raw: String) -> URL? {

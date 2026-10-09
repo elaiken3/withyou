@@ -26,6 +26,7 @@ struct EditReminderSheet: View {
     @State private var scheduledAt: Date
     @State private var pickNewTime: Bool
     @State private var saveFailed = false
+    @State private var isBreakingDown = false
 
     init(reminder: VerboseReminder) {
         self.reminder = reminder
@@ -57,6 +58,8 @@ struct EditReminderSheet: View {
                 Section("First step") {
                     TextField("A tiny first step", text: $startStep, axis: .vertical)
                         .listRowBackground(Color.appSurface)
+
+                    breakDownRow
                 }
 
                 Section {
@@ -117,6 +120,38 @@ struct EditReminderSheet: View {
                 )
                 .listRowBackground(Color.appSurface)
             }
+        }
+    }
+
+    /// "Break it down": tapping a step fills in the first step (and a smaller estimate).
+    /// Nothing is saved until Save.
+    @ViewBuilder
+    private var breakDownRow: some View {
+        if isBreakingDown {
+            BreakDownView(
+                title: trimmedTitle,
+                currentStep: startStep,
+                onPick: { step, index in
+                    let change = BreakDownChoice.change(picking: step, at: index, previousEstimate: estimate)
+                    startStep = change.startStep
+                    estimate = change.estimateMinutes
+                    isBreakingDown = false
+                },
+                onClose: {
+                    isBreakingDown = false
+                }
+            )
+            .listRowBackground(Color.appSurface)
+        } else {
+            Button {
+                Haptics.tap()
+                isBreakingDown = true
+            } label: {
+                Label("Break it down", systemImage: "list.number")
+            }
+            .disabled(trimmedTitle.isEmpty)
+            .accessibilityHint("Shows a few tiny steps to pick from")
+            .listRowBackground(Color.appSurface)
         }
     }
 

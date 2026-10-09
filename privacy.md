@@ -1,40 +1,44 @@
 # Privacy Policy — WithYou
 
-Effective date: 2026-10-08
+Effective date: 2026-10-09
 
-WithYou is designed to be privacy-friendly. Your thoughts, tasks, reminders and focus sessions stay on your device.
+WithYou is designed to be privacy-friendly. Your thoughts, tasks, reminders and focus sessions stay on your device. There are no accounts to create, and WithYou doesn't register your device with any server.
 
 ## What stays on your device
-All content you create (captured thoughts, Inbox items, reminders, focus sessions, brain-dump notes, profiles and preferences) is stored only on your device, using Apple's SwiftData framework. It is never sent to WithYou or to anyone else.
+All content you create (captured thoughts, Inbox items, reminders, focus sessions, brain-dump notes, profiles and preferences) is stored only on your device, using Apple's SwiftData framework.
 
-Reminder and focus notifications are created and scheduled on your device.
+Reminders, focus endings and the optional daily check-in are local notifications, created and scheduled on your device. WithYou doesn't use push notifications and doesn't send a device token anywhere.
 
-## "Make it smaller"
-On devices that support Apple Intelligence (iOS 26 or later), "Make it smaller" may use Apple's on-device language model to suggest a smaller first step. This happens entirely on your device. Nothing is sent to WithYou or to any third party. On other devices, the suggestion comes from simple built-in rules.
+## Voice capture
+When you use the mic, Apple's speech recognition turns what you say into text. WithYou asks for on-device recognition whenever your iPhone supports it for your language, so your voice stays on your device. Where it doesn't, Apple may process the audio to recognize it, as with keyboard dictation, under Apple's privacy policy. WithYou never receives or stores audio. The microphone is only on while you're capturing.
 
-## What is sent to the WithYou server
-Only if **both** of these are true:
-- you allowed notifications, and
-- the Privacy toggle in Settings ("Share push token with WithYou's server") is on,
+Capturing with Siri works through Siri, under Apple's privacy policy.
 
-the app sends the following to the WithYou backend so it can deliver push notifications:
-- install ID (a random identifier generated on your device, not linked to your name, email or Apple ID)
-- APNs device token (Apple's push address for this install)
-- device timezone
-- whether notifications are enabled
-- APNs environment (sandbox or production)
+## AI help
+WithYou's AI features (sorting out a capture, breaking a task down, help when you're stuck, picking one thing to do, tidying brain-dump thoughts) only suggest. Nothing changes until you choose it. They work in one of three ways:
 
-When the device first registers, the server issues a random per-install secret. The app stores it in the iOS Keychain and uses it to authorize later changes to this install's record.
+- **On your device.** On devices that support Apple Intelligence (iOS 26 or later), WithYou uses Apple's on-device language model. This happens entirely on your device.
+- **Built-in rules.** Without Apple Intelligence, simple rules on your device give the suggestion.
+- **Cloud AI (optional, off by default).** Only if you turn on "Use cloud AI" in Settings, and only when Apple Intelligence isn't available or can't answer that request, a request is sent to WithYou's server, which passes it to Claude (an AI model by Anthropic) and returns the suggestion.
 
-No content you create is ever sent. Like any internet connection, the server receives your IP address as part of the request.
+### What a cloud AI request contains
+- the text of that one request: for example, the thought you asked to sort out, the task you asked to break down, the titles of the Inbox items and today's reminders when you ask for help picking, or the brain-dump thoughts being tidied
+- the small details that request needs, such as your current time and time zone, your morning and evening hours, the energy level you chose and time estimates
+- a random anonymous ID created on your device, so daily limits can be applied. It isn't linked to your name, email, phone number or Apple ID.
 
-## Turning it off
-Turning the Privacy toggle off deletes this install's record from the WithYou server and removes the stored secret from your device. If the server can't be reached, the toggle stays on and nothing changes, so you can try again later.
+### What is kept
+WithYou's server doesn't store your words or the AI's replies. It keeps only a count of requests per anonymous ID per day, to apply fair daily limits, and deletes those counts after 35 days. Like any internet connection, the server receives your IP address as part of the request.
 
-Deleting the app removes everything stored on your device. To also delete the server record, turn the toggle off before deleting the app.
+The server runs on Supabase (hosting). Anthropic processes each request to produce the reply, under its terms for business customers.
+
+### Turning it off and deleting it
+Turning cloud AI off stops sending requests. "Delete my cloud AI data" in Settings deletes the anonymous ID and its usage counts from the server and turns cloud AI off. If you delete the app without doing that, the usage counts are still deleted after 35 days, and the anonymous ID on its own says nothing about you.
+
+## Earlier versions
+Earlier versions of WithYou could send a push token, time zone and a random install ID to a WithYou server for notifications. That server has been retired and its records deleted. When you update, WithYou removes the old install ID and its stored secret from your device.
 
 ## Third parties
-WithYou does not use analytics, advertising SDKs or trackers. WithYou does not sell your data.
+WithYou does not use analytics, advertising SDKs or trackers. WithYou does not sell your data. The only outside services WithYou uses are Supabase and Anthropic, and only for cloud AI, if you turn it on.
 
 ## Contact
 For support or privacy questions, visit: https://wearewithyou.app/support/
