@@ -5,6 +5,7 @@
 # Build results
 build/
 DerivedData/
+*.xcresult
 *.xcworkspace/xcuserdata/
 *.xcworkspace/xcuserdata/**
 
@@ -18,6 +19,9 @@ DerivedData/
 # Xcode 15+ user data
 xcuserdata/
 *.xcuserdatad/
+
+# Shared schemes (used by CI) must stay tracked
+!*.xcodeproj/xcshareddata/
 
 # SwiftUI previews
 *.preview-thumbnails/
@@ -69,6 +73,7 @@ fastlane/test_output/
 
 .env
 *.env
+# Local-only config. Copy Config/Secrets.swift.example to WithYou/Config/Secrets.swift.
 WithYou/Config/WithYou.local.xcconfig
 WithYou/Config/Secrets.swift
 

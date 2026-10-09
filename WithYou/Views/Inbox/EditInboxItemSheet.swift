@@ -5,6 +5,7 @@
 //  Created by Eugene Aiken on 1/6/26.
 //
 
+import Foundation
 import SwiftUI
 import SwiftData
 
@@ -15,6 +16,7 @@ struct EditInboxItemSheet: View {
     @State private var title: String
     @State private var startStep: String
     @State private var estimate: Int
+    @State private var saveFailed = false
 
     let item: InboxItem
 
@@ -25,44 +27,73 @@ struct EditInboxItemSheet: View {
         _estimate = State(initialValue: item.estimateMinutes)
     }
 
+    private var trimmedTitle: String {
+        title.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     var body: some View {
         NavigationStack {
             Form {
                 Section("Captured") {
-                    TextField("Title", text: $title)
-                }
-                
-                Section("First step") {
-                    TextField("Start step", text: $startStep)
+                    TextField("Title", text: $title, axis: .vertical)
+                        .listRowBackground(Color.appSurface)
                 }
 
-                Section("Time") {
-                    Stepper("\(estimate) minutes", value: $estimate, in: 1...60)
+                Section("First step") {
+                    TextField("A tiny first step", text: $startStep, axis: .vertical)
+                        .listRowBackground(Color.appSurface)
+                }
+
+                Section {
+                    EstimateMinutesPicker(minutes: $estimate)
+                        .listRowBackground(Color.appSurface)
+                } header: {
+                    Text("Time")
+                } footer: {
+                    Text("A rough guess is plenty.")
+                }
+
+                if saveFailed {
+                    Section {
+                        Text("That didn’t save. Try again in a moment.")
+                            .font(.footnote)
+                            .foregroundStyle(.appSecondaryText)
+                            .listRowBackground(Color.appSurface)
+                    }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(Color.appBackground)
             .navigationTitle("Edit")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { save() }
-                }
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
-            }
-            .onAppear {
-                title = item.title
-                startStep = item.startStep
-                estimate = item.estimateMinutes
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { save() }
+                        .disabled(trimmedTitle.isEmpty)
+                }
             }
         }
+        .tint(.appAccent)
     }
 
     private func save() {
-        item.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else { return }
+
+        item.title = trimmedTitle
         item.startStep = startStep.trimmingCharacters(in: .whitespacesAndNewlines)
         item.estimateMinutes = estimate
 
-        do { try context.save() } catch { return }
-        dismiss()
+        do {
+            try context.save()
+            Haptics.success()
+            dismiss()
+        } catch {
+            Haptics.error()
+            print("❌ Save failed (EditInboxItemSheet):", error)
+            saveFailed = true
+        }
     }
 }

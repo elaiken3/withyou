@@ -7,13 +7,34 @@
 
 import SwiftUI
 import SwiftData
+import OSLog
+
+private let routingLog = Logger(subsystem: "com.commongenelabs.WithYou", category: "routing")
 
 struct RootView: View {
     @Environment(\.modelContext) private var context
-    @State private var selectedTab: AppTab = .today
 
-    // Drives light/dark/system for the whole app UI
-    @State private var preferredScheme: ColorScheme? = nil
+    @State private var selectedTab: AppTab = .today
+    @State private var showRefocus = false
+    @State private var showWelcome = false
+    @State private var didRunLaunchSetup = false
+
+    @AppStorage("hasSeenWelcome") private var hasSeenWelcome = false
+
+    // The appearance setting lives on the active profile. Reading it through @Query keeps
+    // the whole app in sync the moment the profile changes.
+    @Query private var appStates: [AppState]
+    @Query(sort: \UserProfile.createdAt) private var profiles: [UserProfile]
+
+    private var router: AppRouter { AppRouter.shared }
+
+    private var activeProfile: UserProfile? {
+        if let id = appStates.first?.activeProfileId,
+           let match = profiles.first(where: { $0.id == id }) {
+            return match
+        }
+        return profiles.first
+    }
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -23,27 +44,28 @@ struct RootView: View {
                     .tabItem { Label(tab.title, systemImage: tab.systemImage) }
             }
         }
-        // ✅ Apply to the whole app UI
-        .preferredColorScheme(preferredScheme)
-        .onReceive(NotificationCenter.default.publisher(for: .appearancePreferenceChanged)) { _ in
-            refreshPreferredScheme()
+        .tint(.appAccent)
+        .preferredColorScheme(activeProfile?.colorScheme.preferred)
+        .sheet(isPresented: $showRefocus) {
+            RefocusView()
+        }
+        .fullScreenCover(isPresented: $showWelcome, onDismiss: {
+            // Anything that arrived while the welcome was up (e.g. a Siri shortcut).
+            handle(router.pendingRoute)
+        }) {
+            WelcomeView {
+                finishWelcome()
+            }
+            .interactiveDismissDisabled()
         }
         .onAppear {
-            ProfileStore.ensureDefaultProfile(in: context)
-            FocusSessionStore.normalizeActiveSessions(in: context)
-            refreshPreferredScheme()
+            runLaunchSetupIfNeeded()
+            // A cold launch from a notification or Siri sets the route before any view exists.
+            handle(router.pendingRoute)
         }
-        // ✅ Re-evaluate periodically when RootView becomes active again (covers “back from settings” cases)
-        .onChange(of: selectedTab) { _, _ in
-            refreshPreferredScheme()
+        .onChange(of: router.pendingRoute) { _, route in
+            handle(route)
         }
-    }
-
-    private func refreshPreferredScheme() {
-        let profile = ProfileStore.activeProfile(in: context)
-
-        // If you implemented profile.colorSchemeRaw + AppColorScheme.preferred:
-        preferredScheme = profile?.colorScheme.preferred
     }
 
     @ViewBuilder
@@ -60,5 +82,102 @@ struct RootView: View {
         case .capture:
             QuickAddView()
         }
+    }
+
+    // MARK: - Launch
+
+    private func runLaunchSetupIfNeeded() {
+        guard !didRunLaunchSetup else { return }
+        didRunLaunchSetup = true
+
+        ProfileStore.ensureDefaultProfile(in: context)
+        FocusSessionStore.normalizeActiveSessions(in: context)
+
+        guard !hasSeenWelcome else { return }
+        // Appear in place rather than sliding up over the tabs on first launch.
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            showWelcome = true
+        }
+    }
+
+    private func finishWelcome() {
+        hasSeenWelcome = true
+        showWelcome = false
+    }
+
+    // MARK: - Routing
+
+    /// Implements the `AppRouter` contract (see AppRouter.swift).
+    private func handle(_ route: AppRoute?) {
+        guard let route else { return }
+        // Nothing can be presented over the welcome; the route waits until it closes.
+        guard !showWelcome else { return }
+
+        switch route {
+        case .today:
+            selectedTab = .today
+            router.consume()
+        case .focus:
+            selectedTab = .focus
+            router.consume()
+        case .inbox:
+            selectedTab = .inbox
+            router.consume()
+        case .schedule:
+            selectedTab = .schedule
+            router.consume()
+        case .capture:
+            selectedTab = .capture
+            router.consume()
+        case .refocus:
+            router.consume()
+            showRefocus = true
+        case .startFocus(let reminderId):
+            router.consume()
+            startFocus(forReminder: reminderId)
+        case .stuck, .reminder:
+            // TodayView presents the sheet and consumes the route.
+            selectedTab = .today
+        }
+    }
+
+    private func startFocus(forReminder reminderId: UUID) {
+        let descriptor = FetchDescriptor<VerboseReminder>(
+            predicate: #Predicate<VerboseReminder> { $0.id == reminderId }
+        )
+        guard let reminder = (try? context.fetch(descriptor))?.first else {
+            // Let go or finished in the meantime. Just open Today calmly.
+            selectedTab = .today
+            return
+        }
+
+        // Already focusing on this reminder (for example, "I'm starting" tapped twice).
+        if let active = FocusSessionStore.activeSession(in: context),
+           active.sourceId == reminderId,
+           active.startedAt != nil {
+            selectedTab = .focus
+            return
+        }
+
+        let profileMinutes = ProfileStore.activeProfile(in: context)?.defaultFocusMinutes ?? 25
+        let minutes = profileMinutes > 0 ? profileMinutes : 25
+
+        reminder.isStarted = true
+        do {
+            try FocusSessionStore.start(
+                title: reminder.title,
+                startStep: reminder.startStep,
+                durationSeconds: minutes * 60,
+                sourceKind: .reminder,
+                sourceId: reminder.id,
+                beginImmediately: true,
+                in: context
+            )
+        } catch {
+            routingLog.error("Could not start focus from a reminder: \(String(describing: error), privacy: .public)")
+        }
+        selectedTab = .focus
     }
 }

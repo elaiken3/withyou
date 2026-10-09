@@ -33,4 +33,22 @@ struct FocusPresetStore {
         context.insert(preset)
         try? context.save()
     }
+
+    /// Removes one preset and saves.
+    static func delete(_ preset: FocusDurationPreset, in context: ModelContext) {
+        context.delete(preset)
+        do {
+            try context.save()
+        } catch {
+            print("❌ Save failed (delete preset):", error)
+        }
+    }
+
+    /// Removes every preset that belongs to `profileId` (used when a profile is deleted).
+    /// Does not save; the caller saves once with its other changes.
+    static func deleteAll(for profileId: UUID, in context: ModelContext) {
+        for preset in presets(for: profileId, in: context) {
+            context.delete(preset)
+        }
+    }
 }

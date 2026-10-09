@@ -16,8 +16,11 @@ enum AppConfig {
         return URL(string: "https://withyou-backend.fly.dev")!
     }()
 
+    /// The backend API key, or nil when none is configured.
+    /// CI builds use a stub `Secrets.swift` with `apiKey = ""`, which must not send an empty header.
     static let apiKey: String? = {
-        return Secrets.apiKey
+        let trimmed = Secrets.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }()
 
     private static func infoValue(_ key: String) -> String? {

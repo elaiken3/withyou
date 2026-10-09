@@ -8,35 +8,17 @@
 import SwiftUI
 import SwiftData
 import UIKit
-import UserNotifications
 
 @main
 struct WithYouApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    
-    let container: ModelContainer
-
-    init() {
-        print("🚀 WithYouApp init")
-
-        container = try! ModelContainer(
-            for: InboxItem.self,
-                VerboseReminder.self,
-                FocusSession.self,
-                FocusDumpItem.self,
-                FocusBlock.self,
-                FocusDurationPreset.self,
-                UserProfile.self,
-                AppState.self
-        )
-        
-    }
 
     var body: some Scene {
         WindowGroup {
             RootView()
         }
-        .modelContainer(container)
+        // The same container the App Intents and notification actions use,
+        // so every entry point sees the same data.
+        .modelContainer(AppModelContainer.shared)
     }
 }
-

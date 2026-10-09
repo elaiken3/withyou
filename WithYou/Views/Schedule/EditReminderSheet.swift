@@ -5,6 +5,7 @@
 //  Created by Eugene Aiken on 1/6/26.
 //
 
+import Foundation
 import SwiftUI
 import SwiftData
 
@@ -14,79 +15,132 @@ struct EditReminderSheet: View {
 
     let reminder: VerboseReminder
 
+    /// The reminder's time had already passed when the sheet opened (for example, opened
+    /// from a notification). Its time then only changes if the person picks a new one,
+    /// so fixing a typo never quietly reschedules it.
+    private let originalTimeHasPassed: Bool
+
     @State private var title: String
     @State private var startStep: String
     @State private var estimate: Int
     @State private var scheduledAt: Date
+    @State private var pickNewTime: Bool
+    @State private var saveFailed = false
 
     init(reminder: VerboseReminder) {
         self.reminder = reminder
+        let hasPassed = reminder.scheduledAt <= Date()
+        self.originalTimeHasPassed = hasPassed
         _title = State(initialValue: reminder.title)
         _startStep = State(initialValue: reminder.startStep)
         _estimate = State(initialValue: reminder.estimateMinutes)
-        _scheduledAt = State(initialValue: reminder.scheduledAt)
+        _scheduledAt = State(
+            initialValue: hasPassed
+                ? ReminderStore.roundedUp(Date().addingTimeInterval(60 * 60))
+                : reminder.scheduledAt
+        )
+        _pickNewTime = State(initialValue: !hasPassed)
+    }
+
+    private var trimmedTitle: String {
+        title.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("Task") {
-                    TextField("Title", text: $title)
+                    TextField("Title", text: $title, axis: .vertical)
+                        .listRowBackground(Color.appSurface)
                 }
 
                 Section("First step") {
-                    TextField("Start step", text: $startStep, axis: .vertical)
+                    TextField("A tiny first step", text: $startStep, axis: .vertical)
+                        .listRowBackground(Color.appSurface)
                 }
 
-                Section("Estimate") {
-                    Stepper("\(estimate) min", value: $estimate, in: 1...120)
+                Section {
+                    EstimateMinutesPicker(minutes: $estimate)
+                        .listRowBackground(Color.appSurface)
+                } header: {
+                    Text("Time")
+                } footer: {
+                    Text("A rough guess is plenty.")
                 }
 
-                Section("When") {
-                    DatePicker("Scheduled", selection: $scheduledAt, displayedComponents: [.date, .hourAndMinute])
+                whenSection
+
+                if saveFailed {
+                    Section {
+                        Text("That didn’t save. Try again in a moment.")
+                            .font(.footnote)
+                            .foregroundStyle(.appSecondaryText)
+                            .listRowBackground(Color.appSurface)
+                    }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(Color.appBackground)
             .navigationTitle("Edit")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { save() }
-                        .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .disabled(trimmedTitle.isEmpty)
                 }
+            }
+        }
+        .tint(.appAccent)
+    }
+
+    @ViewBuilder
+    private var whenSection: some View {
+        Section("When") {
+            if originalTimeHasPassed {
+                Text("Was \(reminder.scheduledAt.friendlyDayTime)")
+                    .foregroundStyle(.appSecondaryText)
+                    .listRowBackground(Color.appSurface)
+
+                Toggle("Pick a new time", isOn: $pickNewTime)
+                    .listRowBackground(Color.appSurface)
+            }
+
+            if pickNewTime {
+                DatePicker(
+                    "Time",
+                    selection: $scheduledAt,
+                    in: Date()...,
+                    displayedComponents: [.date, .hourAndMinute]
+                )
+                .listRowBackground(Color.appSurface)
             }
         }
     }
 
     private func save() {
-        reminder.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else { return }
+
+        reminder.title = trimmedTitle
         reminder.startStep = startStep.trimmingCharacters(in: .whitespacesAndNewlines)
         reminder.estimateMinutes = estimate
-        reminder.scheduledAt = scheduledAt
+
+        if pickNewTime, scheduledAt != reminder.scheduledAt {
+            reminder.scheduledAt = scheduledAt
+            reminder.lastCheckedAt = nil // a new time starts fresh
+        }
 
         do {
-            try context.save()
+            // Saves and replaces the pending notification with the new words and time.
+            try ReminderStore.saveEdits(reminder, in: context)
+            Haptics.success()
+            dismiss()
         } catch {
+            Haptics.error()
             print("❌ Save failed (EditReminderSheet):", error)
-            return
+            saveFailed = true
         }
-
-        Task {
-            let body =
-            """
-            Start: \(reminder.startStep) (\(reminder.estimateMinutes) min)
-            Tap “Help me start” if you’re stuck.
-            """
-
-            try? await NotificationManager.shared.scheduleReminder(
-                id: reminder.id,
-                title: reminder.title,
-                body: body,
-                scheduledAt: reminder.scheduledAt
-            )
-        }
-
-        dismiss()
     }
 }

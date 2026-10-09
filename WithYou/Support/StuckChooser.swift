@@ -16,24 +16,37 @@ struct StuckSuggestion {
     let startStep: String
     let estimateMinutes: Int
 
-    // Keep references so “Start 2 minutes” can optionally mark isStarted, etc. later.
+    // Kept so "Start 2 minutes" can link the focus session back to where it came from.
     let reminderId: UUID?
     let inboxId: UUID?
     let focusSessionId: UUID?
 }
 
+/// Picks a few small, concrete things to start on when the person feels stuck.
+/// Never a list to work through: one suggestion at a time, with "Try a different one".
 enum StuckChooser {
 
     static func suggestions(
         focusSessions: [FocusSession],
         reminders: [VerboseReminder],
         inboxItems: [InboxItem],
+        startingReminderId: UUID? = nil,
         now: Date = Date()
     ) -> [StuckSuggestion] {
 
-        // A) If there’s an active focus session, that’s the suggestion.
+        var out: [StuckSuggestion] = []
+
+        // A) The reminder the person asked for help with ("Help me start") comes first.
+        var startingId: UUID?
+        if let startingReminderId,
+           let starting = reminders.first(where: { $0.id == startingReminderId && !$0.isDone }) {
+            out.append(reminderSuggestion(starting))
+            startingId = starting.id
+        }
+
+        // B) An active focus session is the next best thing to return to.
         if let active = focusSessions.first(where: { $0.isActive && $0.endedAt == nil }) {
-            return [
+            out.append(
                 StuckSuggestion(
                     source: .activeFocus,
                     title: active.focusTitle,
@@ -43,91 +56,73 @@ enum StuckChooser {
                     inboxId: nil,
                     focusSessionId: active.id
                 )
-            ]
-        }
-
-        var out: [StuckSuggestion] = []
-
-        // B1) Upcoming reminder soon (within 6 hours), not done
-        if let soon = nextSoonReminder(reminders: reminders, now: now, hours: 6) {
-            out.append(
-                StuckSuggestion(
-                    source: .reminder,
-                    title: soon.title,
-                    startStep: normalizeStartStep(soon.startStep, fallbackTitle: soon.title),
-                    estimateMinutes: min(soon.estimateMinutes, 5),
-                    reminderId: soon.id,
-                    inboxId: nil,
-                    focusSessionId: nil
-                )
             )
+            return out
         }
 
-        // B2) Smallest inbox item (prefer <= 5)
-        if let tiny = inboxItems
-            .sorted(by: { $0.estimateMinutes < $1.estimateMinutes })
-            .first
-        {
-            out.append(
-                StuckSuggestion(
-                    source: .inbox,
-                    title: tiny.title,
-                    startStep: normalizeStartStep(tiny.startStep, fallbackTitle: tiny.title),
-                    estimateMinutes: min(tiny.estimateMinutes, 5),
-                    reminderId: nil,
-                    inboxId: tiny.id,
-                    focusSessionId: nil
-                )
-            )
+        // C1) A reminder coming up soon (within 6 hours), not done.
+        if let soon = nextSoonReminder(reminders: reminders, now: now, hours: 6, excluding: startingId) {
+            out.append(reminderSuggestion(soon))
         }
 
-        // B3) Most recent inbox item (fallback, if different)
-        if let recent = inboxItems.first,
-           out.first(where: { $0.inboxId == recent.id }) == nil
-        {
-            out.append(
-                StuckSuggestion(
-                    source: .inbox,
-                    title: recent.title,
-                    startStep: normalizeStartStep(recent.startStep, fallbackTitle: recent.title),
-                    estimateMinutes: min(recent.estimateMinutes, 5),
-                    reminderId: nil,
-                    inboxId: recent.id,
-                    focusSessionId: nil
-                )
-            )
+        // C2) The smallest Inbox item (newest first when estimates tie).
+        let smallest = inboxItems.min { a, b in
+            if a.estimateMinutes != b.estimateMinutes { return a.estimateMinutes < b.estimateMinutes }
+            return a.createdAt > b.createdAt
+        }
+        if let smallest {
+            out.append(inboxSuggestion(smallest))
         }
 
-        // If nothing at all, return an empty list.
+        // C3) The most recently captured Inbox item, if different.
+        if let recent = inboxItems.max(by: { $0.createdAt < $1.createdAt }),
+           recent.id != smallest?.id {
+            out.append(inboxSuggestion(recent))
+        }
+
         return out
     }
 
-    private static func nextSoonReminder(reminders: [VerboseReminder], now: Date, hours: Int) -> VerboseReminder? {
-        let windowEnd = now.addingTimeInterval(TimeInterval(hours * 3600))
-        // You already sort reminders ascending in TodayView, but we don’t assume that here.
-        return reminders
-            .filter { !$0.isDone && $0.scheduledAt >= now && $0.scheduledAt <= windowEnd }
-            .sorted(by: { $0.scheduledAt < $1.scheduledAt })
-            .first
+    private static func reminderSuggestion(_ reminder: VerboseReminder) -> StuckSuggestion {
+        StuckSuggestion(
+            source: .reminder,
+            title: reminder.title,
+            startStep: normalizeStartStep(reminder.startStep, fallbackTitle: reminder.title),
+            estimateMinutes: min(reminder.estimateMinutes, 5),
+            reminderId: reminder.id,
+            inboxId: nil,
+            focusSessionId: nil
+        )
     }
 
+    private static func inboxSuggestion(_ item: InboxItem) -> StuckSuggestion {
+        StuckSuggestion(
+            source: .inbox,
+            title: item.title,
+            startStep: normalizeStartStep(item.startStep, fallbackTitle: item.title),
+            estimateMinutes: min(item.estimateMinutes, 5),
+            reminderId: nil,
+            inboxId: item.id,
+            focusSessionId: nil
+        )
+    }
+
+    private static func nextSoonReminder(
+        reminders: [VerboseReminder],
+        now: Date,
+        hours: Int,
+        excluding excludedId: UUID?
+    ) -> VerboseReminder? {
+        let windowEnd = now.addingTimeInterval(TimeInterval(hours * 3600))
+        return reminders
+            .filter { !$0.isDone && $0.id != excludedId && $0.scheduledAt >= now && $0.scheduledAt <= windowEnd }
+            .min(by: { $0.scheduledAt < $1.scheduledAt })
+    }
+
+    /// The saved first step, or a rule-based one when it's empty.
     static func normalizeStartStep(_ step: String, fallbackTitle: String) -> String {
         let trimmed = step.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty { return trimmed }
-
-        // Simple heuristic fallbacks (rule-based, no AI)
-        let lower = fallbackTitle.lowercased()
-        if lower.contains("email") { return "Open Mail and draft one sentence." }
-        if lower.contains("text") || lower.contains("message") { return "Open Messages and type one sentence." }
-        if lower.contains("call") { return "Open Phone and find the number." }
-        if lower.contains("pay") { return "Open the bill and locate the amount due." }
-        if lower.contains("schedule") { return "Open your calendar and pick a time." }
-
-        return "Open what you need and do the smallest possible step for 2 minutes."
-    }
-
-    static func makeEvenSmaller(_ currentStep: String) -> String {
-        // MVP: one consistent, safe shrink
-        return "Only open what you need. One click is enough."
+        return SmallStepSuggester.ruleBasedStep(for: fallbackTitle, current: "")
     }
 }
