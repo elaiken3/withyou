@@ -19,4 +19,13 @@ enum InstallID {
         defaults.set(fresh, forKey: key)
         return fresh
     }
+
+    /// Replaces the install ID with a fresh one and returns it. Used when the server
+    /// holds a secret for the old ID that this device never received.
+    @discardableResult
+    static func reset() -> String {
+        let fresh = UUID().uuidString.lowercased()
+        UserDefaults.standard.set(fresh, forKey: key)
+        return fresh
+    }
 }

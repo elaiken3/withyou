@@ -10,6 +10,7 @@ import Foundation
 enum AppTab: Hashable, CaseIterable {
     case today, focus, schedule, inbox, capture
 
+    /// Tab bar order.
     static let ordered: [AppTab] = [.today, .focus, .inbox, .schedule, .capture]
 
     var title: String {
@@ -22,13 +23,14 @@ enum AppTab: Hashable, CaseIterable {
         }
     }
 
+    /// Outline symbols; the tab bar fills the selected one automatically.
     var systemImage: String {
         switch self {
         case .today: return "sun.max"
         case .focus: return "timer"
         case .inbox: return "tray"
         case .schedule: return "calendar"
-        case .capture: return "plus.circle.fill"
+        case .capture: return "plus.circle"
         }
     }
 }
