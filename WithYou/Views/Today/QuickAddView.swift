@@ -5,13 +5,21 @@
 //  Created by Eugene Aiken on 12/24/25.
 //
 
+import Foundation
 import SwiftUI
 import SwiftData
-import UIKit
 
+/// Capture: a relief valve, not a commitment.
+///
+/// Used as the Capture tab (`showsCloseButton == false`: no Cancel/Close, a toast with Undo
+/// after saving) and as a sheet from the Inbox (`showsCloseButton == true`: one "Close",
+/// and saving simply dismisses).
 struct QuickAddView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    let showsCloseButton: Bool
 
     @FocusState private var isTextFocused: Bool
     @FocusState private var isFirstStepFocused: Bool
@@ -22,97 +30,62 @@ struct QuickAddView: View {
 
     @State private var isSaving = false
     @State private var lastErrorMessage: String?
+    @State private var destination: Destination?
+    @State private var toast: Toast?
 
     private let parser = CaptureParser()
+
+    init(showsCloseButton: Bool = false) {
+        self.showsCloseButton = showsCloseButton
+    }
 
     var body: some View {
         NavigationStack {
             ZStack {
                 Color.appBackground.ignoresSafeArea()
 
-                VStack(spacing: 12) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
 
-                    // Main capture input (multi-line)
-                    CardTextEditor(
-                        placeholder: "Type or dictate… (e.g., “Email landlord tomorrow morning”)",
-                        text: $text,
-                        icon: "sparkles",
-                        minHeight: 120
-                    )
-                    .padding(.horizontal)
-                    .padding(.top)
-                    .focused($isTextFocused)
-
-                    // Optional First Step (collapsed by default)
-                    Button {
-                        withAnimation(.easeInOut) { showFirstStep.toggle() }
-                        if showFirstStep {
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                                isFirstStepFocused = true
-                            }
-                        } else {
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                                isTextFocused = true
-                            }
-                        }
-                    } label: {
-                        HStack(spacing: 8) {
-                            Text(showFirstStep ? "Hide first step" : "Add a first step (optional)")
-                                .foregroundStyle(.appPrimaryText)
-                            Spacer()
-                            Image(systemName: showFirstStep ? "chevron.up" : "chevron.down")
-                                .foregroundStyle(.appSecondaryText)
-                        }
-                        .padding(.horizontal)
-                        .padding(.vertical, 8)
-                    }
-                    .buttonStyle(.plain)
-
-                    if showFirstStep {
-                        // First step (multi-line, but smaller)
+                        // Main capture input (multi-line)
                         CardTextEditor(
-                            placeholder: "First step (e.g., Open the doc)",
-                            text: $startStepText,
-                            icon: "arrow.right.circle",
-                            minHeight: 80
+                            placeholder: "Type or dictate… (e.g., “Email landlord tomorrow morning”)",
+                            text: $text,
+                            icon: "sparkles",
+                            minHeight: 120
                         )
-                        .padding(.horizontal)
-                        .focused($isFirstStepFocused)
-                    }
+                        .focused($isTextFocused)
 
-                    if let msg = lastErrorMessage {
-                        Text(msg)
-                            .foregroundStyle(.red)
-                            .font(.footnote)
-                            .padding(.horizontal)
-                    }
-
-                    HStack(spacing: 12) {
-                        Button {
-                            Haptics.tap()
-                            save(mode: .smart)
-                        } label: {
-                            Text("Save")
-                                .frame(maxWidth: .infinity)
+                        // Where "Save" will put it, updated as the person types.
+                        if let destination {
+                            destinationChip(destination)
+                                .transition(.opacity)
                         }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(isSaveDisabled)
 
-                        Button {
-                            Haptics.tap()
-                            save(mode: .inboxOnly)
-                        } label: {
-                            Text("Inbox only")
-                                .frame(maxWidth: .infinity)
+                        firstStepToggle
+
+                        if showFirstStep {
+                            CardTextEditor(
+                                placeholder: "First step (e.g., Open the doc)",
+                                text: $startStepText,
+                                icon: "arrow.right.circle",
+                                minHeight: 80
+                            )
+                            .focused($isFirstStepFocused)
                         }
-                        .buttonStyle(.bordered)
-                        .disabled(isSaveDisabled)
-                    }
-                    .padding(.horizontal)
-                    .tint(.appAccent)
 
-                    Spacer()
+                        if let msg = lastErrorMessage {
+                            Text(msg)
+                                .foregroundStyle(.appSecondaryText)
+                                .font(.footnote)
+                        }
+
+                        saveButtons
+                            .padding(.top, 4)
+                    }
+                    .padding()
                 }
+                .scrollDismissesKeyboard(.interactively)
             }
             .contentShape(Rectangle())
             .onTapGesture {
@@ -122,17 +95,13 @@ struct QuickAddView: View {
             .navigationTitle("Capture")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") {
-                        Haptics.tap()
-                        resetStateAndDismiss()
+                if showsCloseButton {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Close") {
+                            Haptics.tap()
+                            dismiss()
+                        }
                     }
-                }
-
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Close") {
-                        Haptics.tap()
-                        dismiss() }
                 }
 
                 ToolbarItemGroup(placement: .keyboard) {
@@ -144,13 +113,159 @@ struct QuickAddView: View {
                 }
             }
             .tint(.appAccent)
+            .toast($toast)
             .onAppear {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                Task {
+                    try? await Task.sleep(for: .milliseconds(50))
                     isTextFocused = true
+                }
+            }
+            // Debounced preview: restarts on every keystroke, settles after ~0.3 s.
+            .task(id: text) {
+                try? await Task.sleep(for: .milliseconds(300))
+                guard !Task.isCancelled else { return }
+                let next = previewDestination(for: text)
+                guard next != destination else { return }
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.15)) {
+                    destination = next
                 }
             }
         }
     }
+
+    // MARK: - Pieces
+
+    private var firstStepToggle: some View {
+        Button {
+            withAnimation(reduceMotion ? nil : .easeInOut) { showFirstStep.toggle() }
+            let showing = showFirstStep
+            Task {
+                try? await Task.sleep(for: .milliseconds(50))
+                if showing {
+                    isFirstStepFocused = true
+                } else {
+                    isTextFocused = true
+                }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Text(showFirstStep ? "Hide first step" : "Add a first step (optional)")
+                    .foregroundStyle(.appPrimaryText)
+                Spacer(minLength: 8)
+                Image(systemName: showFirstStep ? "chevron.up" : "chevron.down")
+                    .foregroundStyle(.appSecondaryText)
+                    .accessibilityHidden(true)
+            }
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func destinationChip(_ destination: Destination) -> some View {
+        Text(destination.chipText)
+            .font(.footnote)
+            .foregroundStyle(.appSecondaryText)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(
+                Capsule().fill(.appSurface)
+            )
+            .overlay(
+                Capsule().stroke(.appHairline.opacity(0.10), lineWidth: 1)
+            )
+            .accessibilityLabel(destination.spokenText)
+    }
+
+    /// Side by side when they fit; stacked at larger text sizes.
+    private var saveButtons: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                saveButton
+                inboxOnlyButton
+            }
+            VStack(spacing: 10) {
+                saveButton
+                inboxOnlyButton
+            }
+        }
+        .tint(.appAccent)
+    }
+
+    private var saveButton: some View {
+        Button {
+            Haptics.tap()
+            save(mode: .smart)
+        } label: {
+            Text("Save")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.large)
+        .disabled(isSaveDisabled)
+    }
+
+    private var inboxOnlyButton: some View {
+        Button {
+            Haptics.tap()
+            save(mode: .inboxOnly)
+        } label: {
+            Text("Inbox only")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.large)
+        .disabled(isSaveDisabled)
+        .accessibilityHint("Saves without scheduling")
+    }
+
+    // MARK: - Destination preview
+
+    private enum Destination: Equatable {
+        case inbox
+        case scheduled(Date)
+        case focusDump
+
+        var chipText: String {
+            switch self {
+            case .inbox:
+                return "→ Inbox"
+            case .scheduled(let date):
+                return "→ \(date.friendlyDayTime)"
+            case .focusDump:
+                return "→ Focus brain dump"
+            }
+        }
+
+        var spokenText: String {
+            switch self {
+            case .inbox:
+                return "Save goes to your Inbox"
+            case .scheduled(let date):
+                return "Save schedules it for \(date.friendlyDayTime)"
+            case .focusDump:
+                return "Save parks it in your focus session"
+            }
+        }
+    }
+
+    /// Where "Save" would put `raw` right now. Same rules as `save(mode: .smart)`.
+    private func previewDestination(for raw: String) -> Destination? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let profile = ProfileStore.activeProfile(in: context)
+        if FocusSessionStore.activeSession(in: context) != nil,
+           profile?.routeSiriToFocusDumpWhenActive ?? true {
+            return .focusDump
+        }
+        if let when = parser.parse(trimmed, profile: profile).scheduledAt {
+            return .scheduled(when)
+        }
+        return .inbox
+    }
+
+    // MARK: - Saving
 
     private var isSaveDisabled: Bool {
         isSaving || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -161,38 +276,32 @@ struct QuickAddView: View {
         case inboxOnly
     }
 
-    private func resolvedStartStep(parsedStartStep: String) -> String {
-        let explicit = startStepText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !explicit.isEmpty { return explicit }
-        return parsedStartStep
-    }
-
-    private func resetStateAndDismiss() {
-        text = ""
-        startStepText = ""
-        showFirstStep = false
-        lastErrorMessage = nil
-
-        isTextFocused = false
-        isFirstStepFocused = false
-
-        dismiss()
+    /// What a save created, so Undo can remove exactly that.
+    private enum Created {
+        case inbox(UUID)
+        case reminder(UUID)
+        case focusDump(UUID)
     }
 
     private func save(mode: SaveMode) {
+        // `isSaving` stays true until every path (including the async scheduling one)
+        // has finished, so a double tap can't save twice.
         guard !isSaving else { return }
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty else { return }
+
         isSaving = true
         lastErrorMessage = nil
 
         ProfileStore.ensureDefaultProfile(in: context)
         let profile = ProfileStore.activeProfile(in: context)
-
-        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedStep = startStepText.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // If focusing, route to Focus Dump
-        if let active = FocusSessionStore.activeSession(in: context),
-           (profile?.routeSiriToFocusDumpWhenActive ?? true) {
+        // While focusing, "Save" parks the thought in the session's brain dump (if enabled).
+        // "Inbox only" always means the Inbox.
+        if mode == .smart,
+           let active = FocusSessionStore.activeSession(in: context),
+           profile?.routeSiriToFocusDumpWhenActive ?? true {
 
             let payload: String
             if trimmedStep.isEmpty {
@@ -205,89 +314,137 @@ struct QuickAddView: View {
                 """
             }
 
-            context.insert(FocusDumpItem(text: payload, sessionId: active.id))
+            let dumpItem = FocusDumpItem(text: payload, sessionId: active.id)
+            context.insert(dumpItem)
             do {
                 try context.save()
-                Haptics.success()
-                resetStateAndDismiss()
+                finishSave(created: .focusDump(dumpItem.id), message: "Parked in your focus session.")
             } catch {
-                Haptics.error()
-                lastErrorMessage = "Couldn’t save. Try again."
+                context.delete(dumpItem)
                 print("❌ Save failed (FocusDump):", error)
+                failSave("Couldn’t save that just now. Try again.")
             }
-            isSaving = false
             return
         }
 
-        // Parse input
         let parsed = parser.parse(trimmedText, profile: profile)
-        let startStepToUse = resolvedStartStep(parsedStartStep: parsed.startStep)
+        let startStepToUse = trimmedStep.isEmpty ? parsed.startStep : trimmedStep
 
-        // Inbox-only mode
-        if mode == .inboxOnly {
-            let inbox = InboxItem(
-                content: trimmedText,
-                title: parsed.title,
-                source: .app,
-                startStep: startStepToUse,
-                estimateMinutes: parsed.estimateMinutes
-            )
-            context.insert(inbox)
-
-            do {
-                try context.save()
-                Haptics.success()
-                resetStateAndDismiss()
-            } catch {
-                Haptics.error()
-                lastErrorMessage = "Couldn’t save to Inbox. Try again."
-                print("❌ Save failed (InboxOnly):", error)
-            }
-
-            isSaving = false
-            return
-        }
-
-        // Smart mode: schedule if time detected
-        if let when = parsed.scheduledAt {
+        // Smart mode: schedule if a time was mentioned.
+        if mode == .smart, let when = parsed.scheduledAt {
             Task {
                 do {
-                    _ = try await ReminderStore.createAndSchedule(
+                    let reminder = try await ReminderStore.createAndSchedule(
                         title: parsed.title,
                         startStep: startStepToUse,
                         estimateMinutes: parsed.estimateMinutes,
                         scheduledAt: when,
                         in: context
                     )
-                    Haptics.success()
-                    resetStateAndDismiss()
+                    finishSave(created: .reminder(reminder.id), message: "Scheduled for \(when.friendlyDayTime).")
                 } catch {
-                    Haptics.error()
-                    lastErrorMessage = "Couldn’t schedule. Try again."
-                    isSaving = false
+                    print("❌ Save failed (schedule):", error)
+                    failSave("Couldn’t schedule that just now. Try again.")
                 }
             }
-        } else {
-            let inbox = InboxItem(
-                content: trimmedText,
-                title: parsed.title,
-                source: .app,
-                startStep: startStepToUse,
-                estimateMinutes: parsed.estimateMinutes
-            )
-            context.insert(inbox)
+            return
+        }
 
-            do {
-                try context.save()
-                Haptics.success()
-                resetStateAndDismiss()
-            } catch {
-                Haptics.error()
-                lastErrorMessage = "Couldn’t save to Inbox. Try again."
-                print("❌ Save failed (Inbox):", error)
+        let inbox = InboxItem(
+            content: trimmedText,
+            title: parsed.title,
+            source: .app,
+            startStep: startStepToUse,
+            estimateMinutes: parsed.estimateMinutes
+        )
+        context.insert(inbox)
+
+        do {
+            try context.save()
+            finishSave(created: .inbox(inbox.id), message: "Saved to Inbox.")
+        } catch {
+            context.delete(inbox)
+            print("❌ Save failed (Inbox):", error)
+            failSave("Couldn’t save to Inbox just now. Try again.")
+        }
+    }
+
+    private func finishSave(created: Created, message: String) {
+        Haptics.success()
+        let savedText = text
+        let savedStep = startStepText
+
+        resetFields()
+        isSaving = false
+
+        // Sheet: just close. The person came here from somewhere else.
+        if showsCloseButton {
+            dismiss()
+            return
+        }
+
+        isTextFocused = false
+        isFirstStepFocused = false
+        toast = Toast(text: message, actionTitle: "Undo", action: {
+            undo(created, restoringText: savedText, step: savedStep)
+        })
+    }
+
+    private func failSave(_ message: String) {
+        Haptics.error()
+        lastErrorMessage = message
+        isSaving = false
+    }
+
+    private func resetFields() {
+        text = ""
+        startStepText = ""
+        showFirstStep = false
+        lastErrorMessage = nil
+        destination = nil
+    }
+
+    /// Removes what the last save created and puts the words back, so nothing is lost.
+    private func undo(_ created: Created, restoringText savedText: String, step savedStep: String) {
+        switch created {
+        case .inbox(let id):
+            var descriptor = FetchDescriptor<InboxItem>(
+                predicate: #Predicate<InboxItem> { (item: InboxItem) in item.id == id }
+            )
+            descriptor.fetchLimit = 1
+            if let item = (try? context.fetch(descriptor))?.first {
+                context.delete(item)
+                try? context.save()
+            }
+
+        case .reminder(let id):
+            var descriptor = FetchDescriptor<VerboseReminder>(
+                predicate: #Predicate<VerboseReminder> { (reminder: VerboseReminder) in reminder.id == id }
+            )
+            descriptor.fetchLimit = 1
+            if let reminder = (try? context.fetch(descriptor))?.first {
+                // Cancels the pending notification too.
+                try? ReminderStore.letGo(reminder, in: context)
+            } else {
+                NotificationManager.shared.cancelReminder(id: id)
+            }
+
+        case .focusDump(let id):
+            var descriptor = FetchDescriptor<FocusDumpItem>(
+                predicate: #Predicate<FocusDumpItem> { (item: FocusDumpItem) in item.id == id }
+            )
+            descriptor.fetchLimit = 1
+            if let item = (try? context.fetch(descriptor))?.first {
+                context.delete(item)
+                try? context.save()
             }
         }
 
-        isSaving = false
+        // Only refill the editor if the person hasn't started typing something new.
+        if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            text = savedText
+            startStepText = savedStep
+            showFirstStep = !savedStep.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
     }
 }
