@@ -133,12 +133,14 @@ final class SupabaseAuth {
     init(
         config: CloudAIConfig,
         urlSession: URLSession = .shared,
-        store: CloudAISessionStore = KeychainCloudAISessionStore(),
+        store: CloudAISessionStore? = nil,
         now: @escaping () -> Date = { Date() }
     ) {
         self.config = config
         self.urlSession = urlSession
-        self.store = store
+        // Built here rather than as a default argument: default arguments are evaluated outside
+        // the main actor, and the Keychain store is main-actor isolated.
+        self.store = store ?? KeychainCloudAISessionStore()
         self.now = now
     }
 

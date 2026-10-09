@@ -256,13 +256,14 @@ final class CloudAIClient {
     init(
         config: CloudAIConfig?,
         urlSession: URLSession = .shared,
-        store: CloudAISessionStore = KeychainCloudAISessionStore(),
+        store: CloudAISessionStore? = nil,
         now: @escaping () -> Date = { Date() }
     ) {
         self.config = config
         self.urlSession = urlSession
         self.now = now
         if let config {
+            // A nil store means the Keychain (see SupabaseAuth.init).
             auth = SupabaseAuth(config: config, urlSession: urlSession, store: store, now: now)
         } else {
             auth = nil
