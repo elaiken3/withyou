@@ -18,13 +18,32 @@ concurrency:
 
 jobs:
   test:
-    name: Build and test
-    runs-on: macos-26
+    name: Build and test (${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 40
+    # The Xcode 27 image is a GitHub preview; its result is reported but doesn't block.
+    continue-on-error: ${{ matrix.preview }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Xcode 26
+            runner: macos-26
+            xcode: ""
+            preview: false
+          # Matches iPhones on iOS 27 (Xcode 26 can't build to them).
+          - name: Xcode 27
+            runner: xcode-27
+            xcode: /Applications/Xcode_27.1.app
+            preview: true
 
     steps:
       - name: Check out
         uses: actions/checkout@v5
+
+      - name: Select Xcode
+        if: matrix.xcode != ''
+        run: sudo xcode-select -s "${{ matrix.xcode }}"
 
       - name: Show Xcode version
         run: xcodebuild -version
@@ -101,7 +120,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: WithYouTests-xcresult
+          name: WithYouTests-xcresult-${{ matrix.name }}
           path: ${{ runner.temp }}/WithYouTests.xcresult
           if-no-files-found: ignore
           retention-days: 7
