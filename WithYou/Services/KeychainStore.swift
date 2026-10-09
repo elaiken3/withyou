@@ -9,8 +9,9 @@ import OSLog
 
 /// Small wrapper around generic-password Keychain items for this app.
 ///
-/// Used for the per-install secret the backend issues on first registration, so it is
-/// never kept in plain `UserDefaults`.
+/// Holds the anonymous cloud AI session (see `KeychainCloudAISessionStore`), so tokens are
+/// never kept in plain `UserDefaults`. `installSecretAccount(for:)` names the old server's
+/// per-install secret so it can still be found and removed.
 enum KeychainStore {
     static let service = "com.commongenelabs.WithYou"
 

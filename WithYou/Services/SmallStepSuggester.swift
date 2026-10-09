@@ -4,31 +4,13 @@
 //
 
 import Foundation
-#if canImport(FoundationModels)
-import FoundationModels
-#endif
 
-/// Suggests a smaller first step for "Make it smaller".
-///
-/// On devices with Apple Intelligence (iOS 26+), the on-device model writes a step
-/// specific to the task. Nothing leaves the device. Everywhere else, and whenever the
-/// model is unavailable or slow, it falls back to simple rules.
+/// Simple, offline small steps. The rules behind "Break it down" and the first steps the
+/// AI layer falls back to (see `AIRules`); model-written steps go through `AIService`.
 enum SmallStepSuggester {
     static let genericStep = "Open what you need and do the smallest possible step for 2 minutes."
 
-    /// Returns a smaller step than `current` for a task titled `title`.
-    static func smallerStep(for title: String, current: String) async -> String {
-        #if canImport(FoundationModels)
-        if #available(iOS 26.0, *) {
-            if let suggestion = await modelSuggestion(for: title, current: current) {
-                return suggestion
-            }
-        }
-        #endif
-        return ruleBasedStep(for: title, current: current)
-    }
-
-    /// Instant, offline fallback. Never returns the same text as `current`.
+    /// One small first step for a task titled `title`. Never returns the same text as `current`.
     static func ruleBasedStep(for title: String, current: String) -> String {
         let lower = title.lowercased()
         let candidates: [String]
@@ -54,31 +36,41 @@ enum SmallStepSuggester {
         let trimmedCurrent = current.trimmingCharacters(in: .whitespacesAndNewlines)
         return candidates.first(where: { $0 != trimmedCurrent }) ?? candidates[0]
     }
-}
 
-#if canImport(FoundationModels)
-@available(iOS 26.0, *)
-extension SmallStepSuggester {
-    fileprivate static func modelSuggestion(for title: String, current: String) async -> String? {
-        guard case .available = SystemLanguageModel.default.availability else { return nil }
+    /// Instant, offline steps for "Break it down": 2–4 tiny steps in order, the first one
+    /// under 2 minutes. Leaves out `current` when there are enough steps without it.
+    static func ruleBasedSteps(for title: String, current: String) -> [String] {
+        let lower = title.lowercased()
+        let steps: [String]
 
-        let session = LanguageModelSession(instructions: """
-            You help a person with ADHD start a task. Reply with one tiny, concrete first \
-            action that takes under two minutes. Start with a verb. Use at most 12 words. \
-            No preamble, no quotes, no lists, and no pressure or judgment.
-            """)
-
-        do {
-            let prompt = "Task: \(title)\nCurrent first step: \(current)\nA smaller first step:"
-            let response = try await session.respond(to: prompt)
-            let text = response.content
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .trimmingCharacters(in: CharacterSet(charactersIn: "\"“”'"))
-            guard !text.isEmpty, text.count <= 120, !text.contains("\n") else { return nil }
-            return text
-        } catch {
-            return nil
+        if lower.contains("email") || lower.contains("reply") {
+            steps = ["Open Mail and find the thread.", "Write just the first sentence.",
+                     "Add the rest in plain words.", "Read it once, then send."]
+        } else if lower.contains("text") || lower.contains("message") {
+            steps = ["Open Messages and find the chat.", "Type one sentence. Don’t send yet.",
+                     "Add anything else, then send."]
+        } else if lower.contains("call") || lower.contains("phone") {
+            steps = ["Find the phone number.", "Write down the one thing you need to ask.",
+                     "Make the call. It’s fine to read from your note."]
+        } else if lower.contains("pay") || lower.contains("bill") || lower.contains("rent") {
+            steps = ["Open the bill and find the amount.", "Open the payment app or website.",
+                     "Pay it and save the confirmation."]
+        } else if lower.contains("clean") || lower.contains("tidy") || lower.contains("laundry") {
+            steps = ["Pick up five things.", "Clear one surface.",
+                     "Set a 5-minute timer and keep going until it ends."]
+        } else if lower.contains("write") || lower.contains("draft") || lower.contains("essay") {
+            steps = ["Open the document.", "Write one messy sentence.",
+                     "Jot down three points that come next.", "Turn one point into a few sentences."]
+        } else if lower.contains("schedule") || lower.contains("appointment") || lower.contains("book") {
+            steps = ["Find the number or website.", "Open your calendar and pick a possible time.",
+                     "Call or book online."]
+        } else {
+            steps = ["Open what you need.", "Do the smallest possible step for 2 minutes.",
+                     "Pick the next small step, or stop there."]
         }
+
+        let trimmedCurrent = current.trimmingCharacters(in: .whitespacesAndNewlines)
+        let remaining = steps.filter { $0 != trimmedCurrent }
+        return remaining.count >= 2 ? remaining : steps
     }
 }
-#endif
