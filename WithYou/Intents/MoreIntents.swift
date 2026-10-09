@@ -68,6 +68,23 @@ struct RefocusIntent: AppIntent {
     }
 }
 
+// MARK: - Voice capture
+
+/// Opens WithYou listening, so the person can say what's on their mind and review it
+/// before anything is saved. Good on the Action Button.
+struct VoiceCaptureIntent: AppIntent {
+    static var title: LocalizedStringResource = "Voice capture"
+    static var description = IntentDescription("Open WithYou listening, so you can say what’s on your mind and look it over before saving.")
+
+    static var openAppWhenRun: Bool = true
+
+    @MainActor
+    func perform() async throws -> some IntentResult {
+        AppRouter.shared.open(.voiceCapture)
+        return .result()
+    }
+}
+
 // MARK: - I'm stuck
 
 struct ImStuckIntent: AppIntent {

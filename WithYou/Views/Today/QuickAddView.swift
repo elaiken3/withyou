@@ -14,6 +14,10 @@ import SwiftData
 /// Used as the Capture tab (`showsCloseButton == false`: no Cancel/Close, a toast with Undo
 /// after saving) and as a sheet from the Inbox (`showsCloseButton == true`: one "Close",
 /// and saving simply dismisses).
+///
+/// "Save" is instant and rule-based. "Sort it out for me" asks AI to split and time the
+/// text, and "Speak" opens voice capture; both end in a review, so nothing is saved
+/// without the person seeing it first.
 struct QuickAddView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
@@ -32,6 +36,12 @@ struct QuickAddView: View {
     @State private var lastErrorMessage: String?
     @State private var destination: Destination?
     @State private var toast: Toast?
+
+    @State private var showVoiceCapture = false
+    @State private var isSorting = false
+    @State private var reviewRequest: CaptureReviewRequest?
+    /// What a review or voice capture saved; finished off once its sheet has closed.
+    @State private var pendingBatch: PendingBatch?
 
     private let parser = CaptureParser()
 
@@ -56,11 +66,8 @@ struct QuickAddView: View {
                         )
                         .focused($isTextFocused)
 
-                        // Where "Save" will put it, updated as the person types.
-                        if let destination {
-                            destinationChip(destination)
-                                .transition(.opacity)
-                        }
+                        // Where "Save" will put it (updated as the person types), and the mic.
+                        destinationAndVoiceRow
 
                         firstStepToggle
 
@@ -82,6 +89,10 @@ struct QuickAddView: View {
 
                         saveButtons
                             .padding(.top, 4)
+
+                        if !isTextEmpty {
+                            sortButton
+                        }
                     }
                     .padding()
                 }
@@ -114,6 +125,24 @@ struct QuickAddView: View {
             }
             .tint(.appAccent)
             .toast($toast)
+            .sheet(isPresented: $showVoiceCapture, onDismiss: finishPendingBatch) {
+                VoiceCaptureView(initialText: text) { summary in
+                    pendingBatch = PendingBatch(summary: summary, text: text, step: startStepText)
+                }
+            }
+            .sheet(item: $reviewRequest, onDismiss: finishPendingBatch) { request in
+                NavigationStack {
+                    CaptureReviewView(
+                        suggestions: request.suggestions,
+                        source: request.source,
+                        itemSource: .app,
+                        onClose: { reviewRequest = nil }
+                    ) { summary in
+                        pendingBatch = PendingBatch(summary: summary, text: text, step: startStepText)
+                        reviewRequest = nil
+                    }
+                }
+            }
             .onAppear {
                 Task {
                     try? await Task.sleep(for: .milliseconds(50))
@@ -160,6 +189,66 @@ struct QuickAddView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    /// The destination chip on the left, "Speak" on the right; stacked at larger text sizes.
+    private var destinationAndVoiceRow: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                if let destination {
+                    destinationChip(destination)
+                        .transition(.opacity)
+                }
+                Spacer(minLength: 8)
+                voiceButton
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                if let destination {
+                    destinationChip(destination)
+                        .transition(.opacity)
+                }
+                voiceButton
+            }
+        }
+    }
+
+    private var voiceButton: some View {
+        Button {
+            Haptics.tap()
+            isTextFocused = false
+            isFirstStepFocused = false
+            showVoiceCapture = true
+        } label: {
+            Label("Speak", systemImage: "mic.fill")
+                .font(.subheadline.weight(.semibold))
+                .padding(.vertical, 4)
+        }
+        .buttonStyle(.bordered)
+        .disabled(isSaving || isSorting)
+        .accessibilityLabel("Voice capture")
+        .accessibilityHint("Say what’s on your mind. You’ll look it over before anything is saved.")
+    }
+
+    /// AI (or the rules) splits and times the text; a review opens before anything is saved.
+    private var sortButton: some View {
+        Button {
+            Haptics.tap()
+            sortItOut()
+        } label: {
+            HStack(spacing: 6) {
+                if isSorting {
+                    ProgressView()
+                } else {
+                    Image(systemName: "wand.and.stars")
+                        .accessibilityHidden(true)
+                }
+                Text(isSorting ? "Sorting it out…" : "Sort it out for me")
+            }
+            .frame(maxWidth: .infinity, minHeight: 44)
+        }
+        .buttonStyle(.borderless)
+        .disabled(isSaving || isSorting)
+        .accessibilityHint("Splits it into separate things and suggests times. You look it over before anything is saved.")
     }
 
     private func destinationChip(_ destination: Destination) -> some View {
@@ -267,8 +356,12 @@ struct QuickAddView: View {
 
     // MARK: - Saving
 
+    private var isTextEmpty: Bool {
+        text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private var isSaveDisabled: Bool {
-        isSaving || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        isSaving || isSorting || isTextEmpty
     }
 
     private enum SaveMode {
@@ -281,6 +374,15 @@ struct QuickAddView: View {
         case inbox(UUID)
         case reminder(UUID)
         case focusDump(UUID)
+        /// Several items saved from a review.
+        case batch(CaptureSaveSummary)
+    }
+
+    /// A review or voice capture that saved, plus the words to put back on Undo.
+    private struct PendingBatch {
+        let summary: CaptureSaveSummary
+        let text: String
+        let step: String
     }
 
     private func save(mode: SaveMode) {
@@ -390,6 +492,59 @@ struct QuickAddView: View {
         })
     }
 
+    // MARK: - Sort it out / voice
+
+    private func sortItOut() {
+        guard !isSorting, !isSaving else { return }
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty else { return }
+        let trimmedStep = startStepText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        isSorting = true
+        lastErrorMessage = nil
+        isTextFocused = false
+        isFirstStepFocused = false
+
+        ProfileStore.ensureDefaultProfile(in: context)
+        let profile = ProfileStore.activeProfile(in: context)
+
+        Task {
+            let result = await AIService.capture(trimmedText, context: CaptureContext.current(profile: profile))
+            var suggestions = result.value
+            var source = result.source
+            if suggestions.isEmpty {
+                suggestions = CaptureSaver.rulesSuggestions(for: trimmedText, profile: profile)
+                source = .rules
+            }
+            // A first step the person typed beats a suggested one.
+            if !trimmedStep.isEmpty, suggestions.count == 1 {
+                suggestions[0].firstStep = trimmedStep
+            }
+            isSorting = false
+            reviewRequest = CaptureReviewRequest(suggestions: suggestions, source: source)
+        }
+    }
+
+    /// Ends a review or voice capture save the same way as a plain save.
+    private func finishPendingBatch() {
+        guard let batch = pendingBatch else { return }
+        pendingBatch = nil
+
+        // The editor's words went into what was saved.
+        resetFields()
+
+        if showsCloseButton {
+            dismiss()
+            return
+        }
+
+        isTextFocused = false
+        isFirstStepFocused = false
+        toast = Toast(text: CaptureSaver.message(for: batch.summary), actionTitle: "Undo", action: {
+            undo(.batch(batch.summary), restoringText: batch.text, step: batch.step)
+        })
+    }
+
     private func failSave(_ message: String) {
         Haptics.error()
         lastErrorMessage = message
@@ -438,6 +593,9 @@ struct QuickAddView: View {
                 context.delete(item)
                 try? context.save()
             }
+
+        case .batch(let summary):
+            CaptureSaver.undo(summary, in: context)
         }
 
         // Only refill the editor if the person hasn't started typing something new.
