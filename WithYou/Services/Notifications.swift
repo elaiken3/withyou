@@ -7,7 +7,6 @@
 
 import Foundation
 import SwiftData
-import UIKit
 import UserNotifications
 import OSLog
 
@@ -22,10 +21,14 @@ enum ReminderAction: String {
 enum NotificationCategory {
     static let reminder = "VERBOSE_REMINDER"
     static let focusEnd = "FOCUS_END"
+    /// The optional daily check-in (see `DailyCheckIn`). No buttons; a tap opens Today.
+    static let dailyCheckIn = "DAILY_CHECKIN"
 }
 
 /// Owns local notifications: permission, action categories, scheduling, and what
 /// happens when someone taps a notification or one of its buttons.
+///
+/// Everything is local. The app doesn't register for remote (push) notifications.
 final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     static let shared = NotificationManager()
     private let log = Logger(subsystem: "com.commongenelabs.WithYou", category: "notifications")
@@ -42,9 +45,10 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         center.setNotificationCategories(Self.categories)
     }
 
-    /// Asks for permission the first time something is scheduled, then registers for
-    /// remote push so the backend gets a token. Safe to call often.
-    func ensureAuthorization() async {
+    /// Asks for permission the first time something is scheduled (or the daily check-in is
+    /// turned on). Safe to call often. Returns whether notifications can be shown.
+    @discardableResult
+    func ensureAuthorization() async -> Bool {
         let center = UNUserNotificationCenter.current()
         let settings = await center.notificationSettings()
 
@@ -53,31 +57,16 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
             do {
                 let granted = try await center.requestAuthorization(options: [.alert, .sound])
                 log.info("Notification permission granted=\(granted, privacy: .public)")
-                if granted { await registerForRemoteNotifications() }
+                return granted
             } catch {
                 log.error("Notification permission request failed: \(String(describing: error), privacy: .public)")
+                return false
             }
         case .authorized, .provisional, .ephemeral:
-            await registerForRemoteNotifications()
+            return true
         default:
-            break
+            return false
         }
-    }
-
-    /// At launch: refresh the push token only if the person already allowed notifications.
-    func registerForRemoteIfAuthorized() async {
-        let settings = await UNUserNotificationCenter.current().notificationSettings()
-        switch settings.authorizationStatus {
-        case .authorized, .provisional, .ephemeral:
-            await registerForRemoteNotifications()
-        default:
-            break
-        }
-    }
-
-    @MainActor
-    private func registerForRemoteNotifications() {
-        UIApplication.shared.registerForRemoteNotifications()
     }
 
     private static var categories: Set<UNNotificationCategory> {
@@ -120,7 +109,14 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
             options: []
         )
 
-        return [reminder, focus]
+        let checkIn = UNNotificationCategory(
+            identifier: NotificationCategory.dailyCheckIn,
+            actions: [],
+            intentIdentifiers: [],
+            options: []
+        )
+
+        return [reminder, focus, checkIn]
     }
 
     // MARK: - Scheduling
@@ -195,9 +191,8 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
             return
         }
 
-        // Backend pushes carry a deep link such as "withyou://today".
-        if let link = userInfo["deep_link"] as? String {
-            await MainActor.run { AppRouter.shared.open(deepLink: link) }
+        if response.notification.request.content.categoryIdentifier == NotificationCategory.dailyCheckIn {
+            await MainActor.run { AppRouter.shared.open(.today) }
         }
     }
 

@@ -9,7 +9,8 @@ import Foundation
 import SwiftUI
 import SwiftData
 
-/// Settings: profiles, app-wide Focus & Refocus options, privacy and help.
+/// Settings: profiles, app-wide Focus & Refocus options, the daily check-in, AI help,
+/// privacy and help.
 ///
 /// Has no NavigationStack of its own; callers wrap it: `NavigationStack { ProfilesView() }`.
 struct ProfilesView: View {
@@ -26,15 +27,7 @@ struct ProfilesView: View {
     @State private var newName: String = ""
     @State private var profilePendingDeletion: UserProfile? = nil
 
-    @State private var serverSharingOn: Bool
-    @State private var isUpdatingSharing = false
-    @State private var sharingMessage: String? = nil
-
     @State private var showWelcome = false
-
-    init() {
-        _serverSharingOn = State(initialValue: DeviceRegistration.isServerSharingEnabled)
-    }
 
     private static let privacyURL = URL(string: "https://wearewithyou.app/privacy/")!
     private static let supportURL = URL(string: "https://wearewithyou.app/support/")!
@@ -53,9 +46,10 @@ struct ProfilesView: View {
             profilesSection
             addProfileSection
             focusSection
+            DailyCheckInSection()
+            CloudAISettingsSection()
             privacySection
             helpSection
-            debugSection
         }
         .scrollContentBackground(.hidden)
         .background(Color.appBackground)
@@ -88,11 +82,6 @@ struct ProfilesView: View {
             WelcomeView {
                 hasSeenWelcome = true
                 showWelcome = false
-            }
-        }
-        .onAppear {
-            if !isUpdatingSharing {
-                serverSharingOn = DeviceRegistration.isServerSharingEnabled
             }
         }
     }
@@ -192,33 +181,6 @@ struct ProfilesView: View {
 
     private var privacySection: some View {
         Section {
-            Toggle(
-                "Share push token with WithYou’s server",
-                isOn: Binding(
-                    get: { serverSharingOn },
-                    set: { updateServerSharing($0) }
-                )
-            )
-            .disabled(isUpdatingSharing)
-            .listRowBackground(Color.appSurface)
-
-            if isUpdatingSharing {
-                HStack(spacing: 8) {
-                    ProgressView()
-                    Text("Updating…")
-                        .foregroundStyle(.appSecondaryText)
-                }
-                .accessibilityElement(children: .combine)
-                .listRowBackground(Color.appSurface)
-            }
-
-            if let sharingMessage {
-                Text(sharingMessage)
-                    .font(.footnote)
-                    .foregroundStyle(.appSecondaryText)
-                    .listRowBackground(Color.appSurface)
-            }
-
             Link(destination: Self.privacyURL) {
                 linkLabel("Privacy Policy", systemImage: "hand.raised")
             }
@@ -231,7 +193,7 @@ struct ProfilesView: View {
         } header: {
             Text("Privacy")
         } footer: {
-            Text("Your thoughts, tasks and focus sessions stay on this iPhone. The server only keeps what it needs to deliver optional notifications; turning this off deletes that record.")
+            Text("Your thoughts, tasks and focus sessions stay on this iPhone. Reminders and check-ins are scheduled here too.")
         }
     }
 
@@ -314,28 +276,6 @@ struct ProfilesView: View {
         // Also removes its focus presets and repairs the active profile (creating "Me" if needed).
         ProfileStore.deleteProfile(profile, in: context)
         Haptics.success()
-    }
-
-    private func updateServerSharing(_ enabled: Bool) {
-        guard !isUpdatingSharing, enabled != serverSharingOn else { return }
-        Haptics.tap()
-        serverSharingOn = enabled
-        isUpdatingSharing = true
-        sharingMessage = nil
-
-        Task {
-            do {
-                try await DeviceRegistration.setServerSharingEnabled(enabled)
-                if !enabled {
-                    sharingMessage = "Turned off. The server’s record for this iPhone was deleted."
-                }
-            } catch {
-                // Nothing changed on the server, so the switch goes back to how it was.
-                serverSharingOn = DeviceRegistration.isServerSharingEnabled
-                sharingMessage = "Couldn’t reach WithYou’s server just now, so nothing changed. You can try again later."
-            }
-            isUpdatingSharing = false
-        }
     }
 }
 
@@ -514,47 +454,3 @@ private struct ProfileDetailView: View {
 private func pickerOptions(_ base: [Int], including current: Int) -> [Int] {
     base.contains(current) ? base : (base + [current]).sorted()
 }
-
-// MARK: - Debug
-
-#if DEBUG
-private struct DebugPushSection: View {
-    @State private var isRegisteringPush = false
-
-    var body: some View {
-        Section("Debug") {
-            Button {
-                isRegisteringPush = true
-                Task {
-                    if let token = DeviceRegistration.cachedToken() {
-                        await DeviceRegistration.registerIfNeeded(token: token, force: true)
-                    }
-                    isRegisteringPush = false
-                }
-            } label: {
-                HStack {
-                    Text(isRegisteringPush ? "Registering…" : "Re-register push token")
-                    Spacer()
-                    if isRegisteringPush {
-                        ProgressView()
-                    }
-                }
-            }
-            .disabled(isRegisteringPush)
-            .listRowBackground(Color.appSurface)
-        }
-    }
-}
-
-extension ProfilesView {
-    fileprivate var debugSection: some View {
-        DebugPushSection()
-    }
-}
-#else
-extension ProfilesView {
-    fileprivate var debugSection: some View {
-        EmptyView()
-    }
-}
-#endif

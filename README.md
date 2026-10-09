@@ -133,7 +133,7 @@ Actions:
 
 -   Schedule
 
--   Make smaller
+-   Break it down
 
 -   Not needed
 
@@ -268,7 +268,7 @@ What's implemented today:
 
 -   Tab-based navigation: Today / Focus / Inbox / Schedule / Capture
 
--   Settings (profile, tone, default times, appearance, notifications, privacy) behind the gear on Today
+-   Settings (profile, tone, default times, appearance, daily check-in, AI help, privacy) behind the gear on Today
 
 -   Capture → Inbox → Reminder flow
 
@@ -304,17 +304,23 @@ What's implemented today:
 
 -   **"Let today rest."** In the evening, one tap moves what's left today to tomorrow morning. Undo is right there.
 
--   **On-device "Make it smaller."** On iOS 26+ with Apple Intelligence, Apple's on-device model suggests a tinier first step. Everywhere else, simple built-in rules do. Nothing leaves your iPhone.
+-   **"Break it down."** A few tiny steps for a task, in Inbox, Today, "I'm stuck" and the edit sheets. Tap one to make it the first step, with Undo where it's saved straight away.
 
--   **Siri / Shortcuts:** Capture, Start focus, Refocus, I'm stuck.
+-   **Voice capture.** Tap the mic in Capture, say "Brain dump in WithYou", or bind the Voice capture shortcut to the Action Button. Your words appear as you speak, and WithYou sorts them into items you look over before anything is saved. "Capture in WithYou" with Siri saves right away and tells you what it saved.
+
+-   **AI help that suggests, never acts.** "Sort it out for me" in Capture, "Break it down", a gentler "I'm stuck", "Help me pick" on Today, and tidying brain-dump thoughts after focus. Each shows one suggestion; you choose what to keep. On iPhones with Apple Intelligence (iOS 26+) it runs on the device. Cloud AI is off by default and can be turned on in Settings. Without either, simple built-in rules do the same jobs, more simply.
+
+-   **Daily check-in (optional).** Off by default. Pick a time in Settings for one quiet notification a day. It's scheduled on your iPhone, and nothing piles up if you skip it.
+
+-   **No more server registration.** WithYou no longer registers for push notifications or sends a device token anywhere. Reminders, focus endings and check-ins are all local notifications. Leftover registration data is removed from the iPhone on first launch.
+
+-   **Siri / Shortcuts:** Capture, Voice capture, Start focus, Refocus, I'm stuck.
 
 -   **Welcome screens** on first launch.
 
 -   **Keep screen awake** during focus (a toggle in Settings).
 
 -   **Breathing haptics** in Refocus.
-
--   **Privacy toggle.** Turning off server sharing in Settings deletes this iPhone's record from WithYou's server.
 
 What's intentionally not finished yet:
 
@@ -421,25 +427,27 @@ You're not testing productivity. You're testing emotional load.
 
 -   Deployment target: iOS 17.6
 
-### Secrets.swift setup
+Nothing needs to be set up to build and run: a fresh clone builds as is.
 
-The backend API key lives in `WithYou/Config/Secrets.swift`, which is gitignored and must never be committed. Create it before your first build:
+### Cloud AI setup (optional)
 
-```sh
-cp Config/Secrets.swift.example WithYou/Config/Secrets.swift
+Cloud AI is opt-in: it's off by default, and when someone turns it on in Settings, each AI request goes to Claude through WithYou's Supabase project. A build without it works fully: Apple Intelligence (when the device has it) and the built-in rules handle every AI feature, and Settings says cloud AI isn't set up.
+
+To build with it, create `WithYou/Config/WithYou.local.xcconfig`. It is gitignored, and `WithYou/Config/WithYou.xcconfig` includes it so its values win:
+
+```
+WITHYOU_SUPABASE_HOST = your-project-ref.supabase.co
+WITHYOU_SUPABASE_ANON_KEY = your-publishable-key
 ```
 
-It contains a single value:
+-   Use the host only, without `https://`, because `//` starts a comment in xcconfig files.
+-   The publishable (anon) key is designed to ship inside apps. It only allows an anonymous sign-in and calls to the `ai` function, which enforces its own daily limits.
+-   Never put the Supabase service-role (secret) key or the Anthropic API key in the app. They live only in Supabase; see `docs/CUTOVER.md` in the `withyou-backend` repository.
+-   If a change doesn't seem to take effect, clean the build folder (⇧⌘K) and build again.
 
-```swift
-enum Secrets {
-    static let apiKey = "..."
-}
-```
+### Secrets.swift (no longer used)
 
-An empty string (`""`) means "no key": the app builds and runs, and simply doesn't send an API-key header to the backend. If the build fails with "cannot find 'Secrets' in scope", this file is missing. The template sits outside `WithYou/` on purpose: that folder is a synchronized group, so any `.swift` file in it is compiled into the app.
-
-The backend URL comes from `WithYou/Config/WithYou.xcconfig`. Local overrides go in `WithYou/Config/WithYou.local.xcconfig` (also gitignored).
+Earlier builds read a backend API key from `WithYou/Config/Secrets.swift`. The app doesn't use it any more: nothing references `Secrets`, so you don't need to create it. If you already have one, you can leave it as is (it still compiles, unused) or delete it. CI still creates a stub, which is harmless. `Config/Secrets.swift.example` is kept for now.
 
 ### Running tests
 
@@ -453,11 +461,11 @@ xcodebuild -project WithYou.xcodeproj -scheme WithYou \
 
 (Use any iPhone simulator you have installed; `xcrun simctl list devices available` lists them.)
 
-The tests cover capture parsing, focus timer math, reminder copy and time helpers, date formatting, and the "Make it smaller" fallback rules.
+The tests cover capture parsing, focus timer math, reminder copy and time helpers, date formatting, the small-step rules, the AI layer (output checks, rules fallbacks, the cloud AI client against a stubbed network), saving captures, voice capture timing, and the daily check-in's date math.
 
 ### CI
 
-`.github/workflows/ios-ci.yml` runs the tests on every pull request and on every push to `main`, on a GitHub-hosted macOS runner. It creates a stub `Secrets.swift` (empty key), picks an available iPhone simulator, and runs the WithYou scheme's tests. If they fail, the `.xcresult` bundle is uploaded as a build artifact.
+`.github/workflows/ios-ci.yml` runs the tests on every pull request and on every push to `main`, on a GitHub-hosted macOS runner. It creates a stub `Secrets.swift` (a leftover; the app no longer reads it), picks an available iPhone simulator, and runs the WithYou scheme's tests. If they fail, the `.xcresult` bundle is uploaded as a build artifact. CI builds have no cloud AI settings, so cloud AI is simply not set up there.
 
 For contribution guidelines, see [CONTRIBUTING.md](CONTRIBUTING.md). For how the code is organized, see [ARCHITECTURE.md](ARCHITECTURE.md).
 

@@ -9,7 +9,8 @@ For product constraints, see: WITHYOU_PRINCIPLES.md
 
 - SwiftUI app, iOS 17.6+, built with Xcode 26. Newer APIs (Foundation Models on iOS 26) sit behind `#available` checks, and `FoundationModels` is weak-linked so the app still launches on older iOS.
 - SwiftData for all user content, stored only on the device.
-- Local notifications for reminders and focus endings. An optional backend only stores what it needs to send push notifications.
+- Local notifications for reminders, focus endings and the optional daily check-in. No push notifications and no server registration.
+- AI is on-device first (Apple Intelligence, iOS 26+), then cloud AI only if the person turns it on (a Supabase Edge Function that calls Claude and stores no task text), then simple rules. Every AI feature works with rules alone.
 - The app target uses `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`: types are main-actor isolated unless marked otherwise.
 - `WithYou/` is a synchronized folder group: every file in it is part of the app target. Don't put templates or scratch `.swift` files there.
 
@@ -25,6 +26,8 @@ WithYou is organized around a few concepts:
 - Refocus: quick grounding reset
 - I'm Stuck: a smaller, safer way in
 - Profiles: tone/default personalization
+- AI help: suggestions the person reviews and confirms, never silent changes
+- Daily check-in: an optional, quiet local notification at a chosen time
 
 
 ## Folder Layout
@@ -33,17 +36,21 @@ WithYou is organized around a few concepts:
 WithYou/
   WithYouApp.swift      App entry; injects AppModelContainer.shared
   Models/               @Model types (see "Data Model")
-  Services/             Stores, notifications, parsing, backend, router
+  Services/             Stores, notifications, daily check-in, parsing, router, CaptureSaver
+    AI/                 AIService and its providers (on-device, cloud, rules), cloud AI settings
+    Voice/              Live speech-to-text for voice capture
   Stores/               FocusPresetStore
   Support/              StuckChooser (suggestions for "I'm stuck")
   DesignSystem/         Card/toast styles, Formatting, Haptics, AppScreen
   Components/           Small shared inputs
   Intents/              App Intents and Siri / Shortcuts phrases
-  Views/                Today, Focus, Inbox, Schedule, Capture (Today/QuickAddView),
+  Views/                Today, Focus, Inbox, Schedule, Capture (Today/QuickAddView; voice capture
+                        and capture review in Capture/), AI (shared suggestion views),
                         Profiles (Settings), Stuck, Onboarding, Shared (RootView, tabs, sheets)
-  Config/               WithYou.xcconfig (tracked), Secrets.swift (gitignored)
+  Config/               WithYou.xcconfig (tracked, empty cloud AI values),
+                        WithYou.local.xcconfig (gitignored, optional real values)
 WithYouTests/           XCTest unit tests (hosted in the app)
-Config/                 Secrets.swift.example (template, outside the app folder)
+Config/                 Secrets.swift.example (legacy template; the app no longer reads Secrets)
 .github/                Issue/PR templates and the CI workflow
 ```
 
@@ -76,9 +83,9 @@ The schema is currently unversioned. **Before the next model change**, introduce
 
 ### AppRouter (routes contract)
 
-`AppRouter.shared` is how code outside the view hierarchy (notification taps and actions, App Intents, backend deep links like `withyou://today`) asks the UI to go somewhere. Routes: `today`, `focus`, `inbox`, `schedule`, `capture`, `refocus`, `stuck(reminderId:)`, `reminder(UUID)`, `startFocus(reminderId:)`.
+`AppRouter.shared` is how code outside the view hierarchy (notification taps and actions, App Intents, deep links like `withyou://today` or `withyou://voice`) asks the UI to go somewhere. Routes: `today`, `focus`, `inbox`, `schedule`, `capture`, `refocus`, `stuck(reminderId:)`, `reminder(UUID)`, `startFocus(reminderId:)`, `voiceCapture`.
 
-- `RootView` observes `pendingRoute`. It handles the tab routes, `.refocus` and `.startFocus`, then calls `consume()`.
+- `RootView` observes `pendingRoute`. It handles the tab routes, `.refocus`, `.startFocus` and `.voiceCapture` (a sheet), then calls `consume()`.
 - For `.stuck` and `.reminder`, `RootView` only switches to Today and leaves the route pending. `TodayView` presents the sheet and calls `consume()`.
 - Views also check `pendingRoute` in `onAppear`, because a cold launch from a notification sets the route before any view exists.
 
@@ -87,9 +94,20 @@ The schema is currently unversioned. **Before the next model change**, introduce
 Owns local notifications:
 
 - Becomes the `UNUserNotificationCenter` delegate and registers the action categories at launch (`configure()`), without prompting.
-- **Contextual permission:** `ensureAuthorization()` asks for permission the first time something is scheduled, not at launch. At launch it only refreshes the push token if permission was already given.
-- Categories: reminders offer *I'm starting*, *Help me start*, *In 10 minutes*, *Tomorrow morning*. Focus endings offer *Wrap up*.
+- **Contextual permission:** `ensureAuthorization()` asks for permission the first time something is scheduled, or when the daily check-in is turned on, never at launch. It returns whether notifications can be shown.
+- **Local only:** the app doesn't register for remote notifications. There is no device token and no push server.
+- Categories: reminders offer *I'm starting*, *Help me start*, *In 10 minutes*, *Tomorrow morning*. Focus endings offer *Wrap up*. The daily check-in (`DAILY_CHECKIN`) has no buttons; a tap opens Today.
 - Handles taps and actions: snoozing and rescheduling go through `ReminderStore`; everything that needs UI goes through `AppRouter`.
+
+### DailyCheckIn
+
+An optional daily check-in, off by default (`@AppStorage` keys `dailyCheckInEnabled` and `dailyCheckInMinutes`, default 540 = 9:00 AM). Settings shows it in `DailyCheckInSection`.
+
+- Schedules the next 7 check-ins as separate one-time local notifications with ids `checkin-YYYY-MM-DD` (`UNCalendarNotificationTrigger` with year, month, day, hour and minute, not repeating). Each refresh first removes every pending `checkin-*` request, and clears check-ins already shown, so nothing piles up.
+- Refreshes at launch (`AppDelegate`), whenever the app becomes active (`WithYouApp`), and when the settings change. Refreshing never asks for permission; turning the check-in on does, once.
+- `upcomingFireDates(after:minutes:restChosenAt:count:calendar:)` is the pure, `nonisolated` date math: it builds each date in the calendar's time zone (wall-clock time holds across daylight-saving changes) and skips today when today's time has passed or the person let today rest.
+- `DailyCheckIn.letTodayRest()` records the "Let today rest" choice so today's check-in is skipped, and `undoLetTodayRest()` takes it back. Today's "Let today rest" action and its Undo call them.
+- Copy rotates through a few calm lines, one per day.
 
 ### ReminderStore and FocusSessionStore: the only write paths
 
@@ -114,13 +132,31 @@ Turns a captured thought into a title, a gentle first step, an estimate and, onl
 
 ### SmallStepSuggester
 
-Powers "Make it smaller". On iOS 26+ with Apple Intelligence available, it asks Apple's on-device Foundation Model for one tiny first step. Otherwise, or if the model is unavailable or fails, it uses `ruleBasedStep`, which never returns the step you already have. Nothing is sent off the device.
+Simple, offline small steps: `ruleBasedStep` (one first step, never the one you already have) and `ruleBasedSteps` (the rules behind "Break it down"). `AIRules` builds on them; model-written steps come from `AIService`.
+
+### AI layer (`Services/AI/`)
+
+`AIService` is the only entry point features use: `capture`, `breakDown`, `stuckHelp`, `suggestNext` and `tidy`. It never throws and always returns something, with an `AISource` (`onDevice`, `cloud`, `rules`) for small attributions such as "Suggested on this iPhone".
+
+- **Order:** Apple's on-device model (`OnDeviceAI`, FoundationModels, iOS 26+, behind `#if canImport(FoundationModels)` and `#available`) → cloud AI, only when the person turned it on and the build is configured → rules (`AIRules`, built on `CaptureParser` and `SmallStepSuggester`). Each attempt has a deadline (10 s on device, 15 s cloud); anything slow, failing or unusable falls through to the next.
+- **Checks:** `AIOutput` validates and clamps every model answer (non-empty titles, estimates 1–240 minutes, at most 12 items).
+- **Suggest, then confirm:** features show suggestions in review sheets or cards; nothing is applied until the person taps. The one exception is Siri capture, which saves because the person asked Siri to, and says what it saved.
+- **Cloud AI:** `CloudAIClient` calls the Supabase Edge Function `ai` (`POST /functions/v1/ai` with `{"task", "input"}`). `SupabaseAuth` signs in anonymously (a random ID, no email or name) and keeps the session in the Keychain via `KeychainStore`. A "try later" from the server pauses cloud AI for a while. `deleteCloudData()` asks the server to delete the anonymous account and its usage counts, then forgets the session.
+- **Settings:** `CloudAISettings` (UserDefaults `cloudAIEnabled`, off by default) and `CloudAISettingsSection`, which shows the toggle, what is sent, and "Delete my cloud AI data".
+- **Configuration:** `AppConfig.supabaseBaseURL` and `AppConfig.supabaseAnonKey` come from the Info.plist keys `WITHYOU_SUPABASE_HOST` and `WITHYOU_SUPABASE_ANON_KEY`, which the xcconfig fills in. Empty or unresolved values mean cloud AI isn't set up.
+
+### Voice capture
+
+- `SpeechTranscriber` (`Services/Voice/`): live speech-to-text with `SFSpeechRecognizer` and `AVAudioEngine`, on device whenever the iPhone supports it for the language. Stops after a short silence or 60 seconds and releases the audio session.
+- `VoiceCaptureView` and `CaptureReviewView` (`Views/Capture/`): speak, then review the sorted items before saving.
+- `CaptureSaver`: saves reviewed suggestions (timed ones through `ReminderStore.createAndSchedule`, the rest as Inbox items) and can undo exactly that save.
 
 ### Other services
 
 - `ProfileStore`: active profile and default-profile setup
-- `DeviceRegistration`, `BackendClient`, `InstallID`, `KeychainStore`: optional push registration. Only runs when notifications are allowed and the Privacy toggle is on. Turning the toggle off deletes the server record. The per-install secret the server issues is kept in the Keychain.
-- `AppConfig`: backend URL (from the xcconfig) and API key (from `Secrets.swift`; empty means none)
+- `KeychainStore`: small Keychain wrapper. Holds the anonymous cloud AI session.
+- `LegacyServerCleanup` (in `AppDelegate.swift`): runs once and removes what the retired push server left on the device (cached push token, registration bookkeeping, the old sharing choice, the install ID and its Keychain secret). It sends nothing.
+- `AppConfig`: cloud AI host and publishable key from the xcconfig. `Secrets.swift` is no longer read.
 
 
 ## Design System
@@ -137,21 +173,21 @@ Use the shared pieces instead of one-off styling:
 
 ## View Layer
 
-Primary tabs: **Today / Focus / Inbox / Schedule / Capture**. Settings (profiles, tone, defaults, appearance, notifications, privacy) open from the gear on Today. First launch shows the welcome screens.
+Primary tabs: **Today / Focus / Inbox / Schedule / Capture**. Settings (profiles, tone, defaults, appearance, daily check-in, AI help, privacy) open from the gear on Today. First launch shows the welcome screens.
 
 - Today: "right now", an optional energy check-in, "Still relevant?" cards, Refocus / I'm stuck / Let today rest. No backlog pressure, no "overdue" framing.
 - Focus: brain dump → timer (pause, extend, keep screen awake) → wrap-up review
-- Inbox: parked thoughts. Actions: schedule, make smaller, let go (with Undo).
+- Inbox: parked thoughts. Actions: schedule, break it down, let go (with Undo).
 - Schedule: upcoming reminders, grouped by day
-- Capture: fast input with a live preview of where the thought will go, and Undo
+- Capture: fast input with a live preview of where the thought will go, and Undo. A mic button opens voice capture; "Sort it out for me" asks `AIService` to split and tidy the text for review.
 
 
 ## Tests and CI
 
-- `WithYouTests/` holds XCTest unit tests for the pure logic: `CaptureParser`, `FocusSessionStore` timer math, `ReminderStore` copy and time helpers, `Formatting`, and `SmallStepSuggester`'s rules. Tests that need models create an in-memory `ModelContainer` **before** creating any `@Model` instance.
+- `WithYouTests/` holds XCTest unit tests for the pure logic: `CaptureParser`, `FocusSessionStore` timer math, `ReminderStore` copy and time helpers, `Formatting`, `SmallStepSuggester`'s rules, the AI layer (output checks, rules, provider fall-through, the cloud client against a stubbed network), `CaptureSaver`, voice capture timing, and `DailyCheckIn`'s date math. Tests that need models create an in-memory `ModelContainer` **before** creating any `@Model` instance.
 - Test classes are `@MainActor`, because the app module defaults to main-actor isolation.
 - The shared **WithYou** scheme (`WithYou.xcodeproj/xcshareddata`) builds the app and runs `WithYouTests`.
-- `.github/workflows/ios-ci.yml` runs the tests on every pull request and push to `main`, with a stub `Secrets.swift`.
+- `.github/workflows/ios-ci.yml` runs the tests on every pull request and push to `main`. It still writes a stub `Secrets.swift`, which the app no longer reads. CI builds have no cloud AI settings.
 
 When you add logic that can be tested without UI, add a test next to the existing ones.
 
