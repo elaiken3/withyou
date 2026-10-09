@@ -48,6 +48,16 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
+      - name: Install the Metal toolchain
+        # Xcode 26+ downloads the Metal compiler separately, and the Refocus orb is a
+        # Metal shader. Never fails here; if it's still missing, the build says so.
+        run: |
+          if xcrun metal --version >/dev/null 2>&1; then
+            echo "Metal toolchain already installed"
+          else
+            xcodebuild -downloadComponent MetalToolchain || echo "Metal toolchain download skipped"
+          fi
+
       - name: Create stub Secrets.swift
         # The real file is gitignored. An empty key means "no key" (no header is sent).
         run: |
