@@ -143,9 +143,12 @@ enum ReminderStore {
     /// Rounds `date` up to the next 5-minute mark so suggested times read naturally.
     static func roundedUp(_ date: Date) -> Date {
         let calendar = Calendar.current
-        let minute = calendar.component(.minute, from: date)
-        let remainder = minute % 5
-        let bumped = remainder == 0 ? date : date.addingTimeInterval(TimeInterval((5 - remainder) * 60))
-        return calendar.date(bySetting: .second, value: 0, of: bumped) ?? bumped
+        // Truncate to the minute. (`date(bySetting: .second, value: 0, of:)` searches
+        // forward, so it would jump to the next minute instead of zeroing the seconds.)
+        let comps = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+        let wholeMinute = calendar.date(from: comps) ?? date
+        let remainder = (comps.minute ?? 0) % 5
+        guard remainder != 0 else { return wholeMinute }
+        return wholeMinute.addingTimeInterval(TimeInterval((5 - remainder) * 60))
     }
 }

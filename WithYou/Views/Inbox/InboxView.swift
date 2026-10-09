@@ -5,9 +5,11 @@
 //  Created by Eugene Aiken on 12/24/25.
 //
 
+import Foundation
 import SwiftUI
 import SwiftData
 
+/// The mental parking lot. Nothing here is overdue and nothing nags.
 struct InboxView: View {
     @Environment(\.modelContext) private var context
 
@@ -18,41 +20,39 @@ struct InboxView: View {
     @State private var orderedItems: [InboxItem] = []
 
     @State private var showQuickAdd = false
-    @State private var itemPendingDeletion: InboxItem?
+    @State private var itemToSchedule: InboxItem?
+    @State private var toast: Toast?
 
     var body: some View {
         NavigationStack {
             ZStack {
-                Color("AppBackground").ignoresSafeArea()
+                Color.appBackground.ignoresSafeArea()
 
-                listContent
+                if currentItems.isEmpty {
+                    emptyState
+                } else {
+                    listContent
+                }
             }
             .navigationTitle("Inbox")
             .navigationBarTitleDisplayMode(.inline)
-            .tint(Color("AppAccent"))
             .toolbar { toolbarItems }
+            .tint(.appAccent)
             .sheet(isPresented: $showQuickAdd) {
-                QuickAddView()
-                    .presentationBackground(Color("AppBackground"))
+                QuickAddView(showsCloseButton: true)
+                    .presentationBackground(Color.appBackground)
             }
-            .confirmationDialog(
-                "Let this go?",
-                isPresented: Binding(
-                    get: { itemPendingDeletion != nil },
-                    set: { if !$0 { itemPendingDeletion = nil } }
-                ),
-                presenting: itemPendingDeletion
-            ) { item in
-                Button("Let go", role: .destructive) {
-                    delete(item)
-                    itemPendingDeletion = nil
+            .sheet(item: $itemToSchedule) { item in
+                ScheduleSheetV2(
+                    title: item.title,
+                    startStep: item.startStep,
+                    estimate: item.estimateMinutes
+                ) { date in
+                    schedule(item, at: date)
                 }
-                Button("Keep", role: .cancel) {
-                    itemPendingDeletion = nil
-                }
-            } message: { _ in
-                Text("You don't have to do everything.")
+                .presentationBackground(Color.appBackground)
             }
+            .toast($toast)
         }
     }
 
@@ -60,18 +60,12 @@ struct InboxView: View {
 
     private var listContent: some View {
         List {
-            if currentItems.isEmpty {
-                emptyStateRow
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color("AppBackground"))
-            } else {
-                ForEach(currentItems, id: \.id) { item in
-                    rowContent(for: item)
-                }
-                .onMove { from, to in
-                    if isReorderMode {
-                        handleMove(from: from, to: to)
-                    }
+            ForEach(currentItems, id: \.id) { item in
+                rowContent(for: item)
+            }
+            .onMove { from, to in
+                if isReorderMode {
+                    handleMove(from: from, to: to)
                 }
             }
         }
@@ -79,7 +73,7 @@ struct InboxView: View {
         .environment(\.defaultMinListRowHeight, 44)
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-        .background(Color("AppBackground"))
+        .background(Color.appBackground)
     }
 
     // MARK: - Row content (extracted for type-checker)
@@ -89,7 +83,7 @@ struct InboxView: View {
         if isReorderMode {
             InboxRow(item: item)
                 .listRowSeparator(.hidden)
-                .listRowBackground(Color("AppBackground"))
+                .listRowBackground(Color.appBackground)
         } else {
             NavigationLink {
                 InboxDetailView(item: item)
@@ -97,14 +91,30 @@ struct InboxView: View {
                 InboxRow(item: item)
             }
             .listRowSeparator(.hidden)
-            .listRowBackground(Color("AppBackground"))
-            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                Button(role: .destructive) {
+            .listRowBackground(Color.appBackground)
+            .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                Button {
                     Haptics.tap()
-                    itemPendingDeletion = item
+                    itemToSchedule = item
                 } label: {
-                    Label("Not needed", systemImage: "trash")
+                    Label("Schedule", systemImage: "calendar")
                 }
+                .tint(.appAccent)
+
+                Button {
+                    complete(item)
+                } label: {
+                    Label("Done", systemImage: "checkmark")
+                }
+                .tint(.appAccent)
+            }
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                Button {
+                    letGo(item)
+                } label: {
+                    Label("Let go", systemImage: "leaf")
+                }
+                .tint(.appSecondaryText)
             }
         }
     }
@@ -123,7 +133,8 @@ struct InboxView: View {
 
     @ViewBuilder
     private var reorderButton: some View {
-        if manualPrioritizationEnabled {
+        // Reordering only means something with two or more items.
+        if manualPrioritizationEnabled && (isReorderMode || items.count > 1) {
             Button(isReorderMode ? "Done" : "Reorder") {
                 Haptics.tap()
                 if !isReorderMode {
@@ -145,7 +156,7 @@ struct InboxView: View {
         } label: {
             Image(systemName: "plus")
         }
-        .accessibilityLabel("Quick add to inbox")
+        .accessibilityLabel("Add to Inbox")
         .disabled(isReorderMode)
     }
 
@@ -193,32 +204,127 @@ struct InboxView: View {
         editMode == .active
     }
 
-    // MARK: - UI
+    // MARK: - Empty state
 
-    private var emptyStateRow: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Inbox is empty")
-                .font(.headline)
-                .foregroundStyle(Color("AppPrimaryText"))
+    private var emptyState: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                VStack(spacing: 10) {
+                    Image(systemName: "tray")
+                        .font(.largeTitle)
+                        .foregroundStyle(.appSecondaryText)
+                        .accessibilityHidden(true)
 
-            Text("Captured thoughts land here when there's no time yet.")
-                .foregroundStyle(Color("AppSecondaryText"))
+                    Text("Nothing parked here.")
+                        .font(.headline)
+                        .foregroundStyle(.appPrimaryText)
+
+                    Text("Captured thoughts without a time land here — no rush to sort them.")
+                        .font(.subheadline)
+                        .foregroundStyle(.appSecondaryText)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .accessibilityElement(children: .combine)
+
+                Button {
+                    Haptics.tap()
+                    showQuickAdd = true
+                } label: {
+                    Label("Add a thought", systemImage: "plus")
+                }
+                .buttonStyle(.bordered)
+                .tint(.appAccent)
+                .disabled(isReorderMode)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 32)
+            .padding(.top, 72)
+            .padding(.bottom, 32)
         }
-        .padding(.vertical, 12)
-        .padding(.horizontal, 6)
+        .scrollBounceBehavior(.basedOnSize)
     }
 
     // MARK: - Actions
 
-    private func delete(_ item: InboxItem) {
-        context.delete(item)
+    /// Lets the item go right away, with Undo, instead of asking first. Fewer decisions.
+    private func letGo(_ item: InboxItem) {
+        Haptics.tap()
 
+        // Keep everything needed to put it back exactly where it was.
+        let content = item.content
+        let title = item.title
+        let createdAt = item.createdAt
+        let source = item.source
+        let startStep = item.startStep
+        let estimate = item.estimateMinutes
+        let sortIndex = item.sortIndex
+
+        context.delete(item)
         do {
             try context.save()
-            Haptics.success()
         } catch {
             Haptics.error()
-            print("❌ Save failed (delete):", error)
+            print("❌ Save failed (let go):", error)
+            return
+        }
+
+        toast = Toast(text: "Let go.", actionTitle: "Undo", action: {
+            let restored = InboxItem(
+                content: content,
+                title: title,
+                createdAt: createdAt,
+                source: source,
+                startStep: startStep,
+                estimateMinutes: estimate,
+                sortIndex: sortIndex
+            )
+            context.insert(restored)
+            do {
+                try context.save()
+            } catch {
+                print("❌ Save failed (undo let go):", error)
+            }
+        })
+    }
+
+    private func complete(_ item: InboxItem) {
+        CompletionStore.completeInboxItem(item, in: context)
+        Haptics.success()
+        toast = Toast(text: "Nice. That counted.")
+    }
+
+    /// Turns the item into a reminder; it leaves the Inbox once the reminder is saved.
+    private func schedule(_ item: InboxItem, at date: Date) {
+        let title = item.title
+        let startStep = item.startStep
+        let estimate = item.estimateMinutes
+
+        Task {
+            do {
+                _ = try await ReminderStore.createAndSchedule(
+                    title: title,
+                    startStep: startStep,
+                    estimateMinutes: estimate,
+                    scheduledAt: date,
+                    in: context
+                )
+            } catch {
+                Haptics.error()
+                print("❌ Save failed (schedule from Inbox):", error)
+                toast = Toast(text: "Couldn’t schedule that just now. It’s still here.")
+                return
+            }
+
+            // The reminder is saved, so the parked thought can leave the Inbox.
+            context.delete(item)
+            do {
+                try context.save()
+            } catch {
+                print("❌ Save failed (remove scheduled item):", error)
+            }
+            Haptics.success()
+            toast = Toast(text: "Scheduled for \(date.friendlyDayTime).")
         }
     }
 }
@@ -226,26 +332,26 @@ struct InboxView: View {
 private struct InboxRow: View {
     let item: InboxItem
 
+    private var startStep: String {
+        item.startStep.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             Text(item.title)
                 .font(.headline)
-                .foregroundStyle(Color("AppPrimaryText"))
+                .foregroundStyle(.appPrimaryText)
+                .fixedSize(horizontal: false, vertical: true)
 
-            Text("Start: \(item.startStep) (\(item.estimateMinutes) min)")
-                .foregroundStyle(Color("AppSecondaryText"))
-                .lineLimit(2)
+            if !startStep.isEmpty {
+                Text("Start: \(startStep) (\(item.estimateMinutes) min)")
+                    .font(.subheadline)
+                    .foregroundStyle(.appSecondaryText)
+                    .lineLimit(3)
+            }
         }
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color("AppSurface"))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color("AppHairline").opacity(0.10), lineWidth: 1)
-        )
-        .shadow(color: .black.opacity(0.03), radius: 8, x: 0, y: 4)
-        .padding(.vertical, 1)
+        .cardStyle(padding: 12)
+        .padding(.vertical, 2)
+        .accessibilityElement(children: .combine)
     }
 }
