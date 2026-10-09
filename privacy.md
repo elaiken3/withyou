@@ -1,27 +1,40 @@
 # Privacy Policy — WithYou
 
-Effective date: 2025-12-29
+Effective date: 2026-10-08
 
-WithYou is designed to be privacy-friendly.
+WithYou is designed to be privacy-friendly. Your thoughts, tasks, reminders and focus sessions stay on your device.
 
-## Data Collection
-WithYou transmits limited device data to enable push notifications.
+## What stays on your device
+All content you create (captured thoughts, Inbox items, reminders, focus sessions, brain-dump notes, profiles and preferences) is stored only on your device, using Apple's SwiftData framework. It is never sent to WithYou or to anyone else.
 
-## Data Storage
-All user-created content (captured thoughts, focus sessions, reminders, and preferences) is stored locally on the device using Apple’s SwiftData framework.
+Reminder and focus notifications are created and scheduled on your device.
 
-## What Is Sent (Push Notifications)
-To deliver push notifications, the app sends the following to the WithYou backend:
-- install ID (a random identifier generated on-device)
-- APNs device token
+## "Make it smaller"
+On devices that support Apple Intelligence (iOS 26 or later), "Make it smaller" may use Apple's on-device language model to suggest a smaller first step. This happens entirely on your device. Nothing is sent to WithYou or to any third party. On other devices, the suggestion comes from simple built-in rules.
+
+## What is sent to the WithYou server
+Only if **both** of these are true:
+- you allowed notifications, and
+- the Privacy toggle in Settings ("Share push token with WithYou's server") is on,
+
+the app sends the following to the WithYou backend so it can deliver push notifications:
+- install ID (a random identifier generated on your device, not linked to your name, email or Apple ID)
+- APNs device token (Apple's push address for this install)
 - device timezone
-- push enabled status
+- whether notifications are enabled
+- APNs environment (sandbox or production)
 
-## Third Parties
-WithYou does not use third-party analytics, advertising SDKs, or trackers.
+When the device first registers, the server issues a random per-install secret. The app stores it in the iOS Keychain and uses it to authorize later changes to this install's record.
 
-## Notifications
-Notifications are used only for user-initiated reminders and focus sessions. Notification content is generated on-device.
+No content you create is ever sent. Like any internet connection, the server receives your IP address as part of the request.
+
+## Turning it off
+Turning the Privacy toggle off deletes this install's record from the WithYou server and removes the stored secret from your device. If the server can't be reached, the toggle stays on and nothing changes, so you can try again later.
+
+Deleting the app removes everything stored on your device. To also delete the server record, turn the toggle off before deleting the app.
+
+## Third parties
+WithYou does not use analytics, advertising SDKs or trackers. WithYou does not sell your data.
 
 ## Contact
-For support, visit: https://elaiken3.github.io/withyou/support
+For support or privacy questions, visit: https://wearewithyou.app/support/

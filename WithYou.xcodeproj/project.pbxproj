@@ -6,8 +6,19 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXContainerItemProxy section */
+		62A0C1012F9C7D0000D1E7A5 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 623411592EFCE13800FB66E3 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 623411602EFCE13800FB66E3;
+			remoteInfo = WithYou;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		623411612EFCE13800FB66E3 /* WithYou.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WithYou.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		62A0C1022F9C7D0000D1E7A5 /* WithYouTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WithYouTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A4A83592C7294DE698FE6261 /* WithYou.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = WithYou.xcconfig; path = WithYou/Config/WithYou.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -30,10 +41,22 @@
 			path = WithYou;
 			sourceTree = "<group>";
 		};
+		62A0C1032F9C7D0000D1E7A5 /* WithYouTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = WithYouTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		6234115E2EFCE13800FB66E3 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		62A0C1042F9C7D0000D1E7A5 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -55,6 +78,7 @@
 			isa = PBXGroup;
 			children = (
 				623411632EFCE13800FB66E3 /* WithYou */,
+				62A0C1032F9C7D0000D1E7A5 /* WithYouTests */,
 				623411622EFCE13800FB66E3 /* Products */,
 				6214BF062F3CED06002B6888 /* Recovered References */,
 			);
@@ -64,6 +88,7 @@
 			isa = PBXGroup;
 			children = (
 				623411612EFCE13800FB66E3 /* WithYou.app */,
+				62A0C1022F9C7D0000D1E7A5 /* WithYouTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -93,6 +118,29 @@
 			productReference = 623411612EFCE13800FB66E3 /* WithYou.app */;
 			productType = "com.apple.product-type.application";
 		};
+		62A0C1052F9C7D0000D1E7A5 /* WithYouTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 62A0C10B2F9C7D0000D1E7A5 /* Build configuration list for PBXNativeTarget "WithYouTests" */;
+			buildPhases = (
+				62A0C1072F9C7D0000D1E7A5 /* Sources */,
+				62A0C1042F9C7D0000D1E7A5 /* Frameworks */,
+				62A0C1062F9C7D0000D1E7A5 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				62A0C1082F9C7D0000D1E7A5 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				62A0C1032F9C7D0000D1E7A5 /* WithYouTests */,
+			);
+			name = WithYouTests;
+			packageProductDependencies = (
+			);
+			productName = WithYouTests;
+			productReference = 62A0C1022F9C7D0000D1E7A5 /* WithYouTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -105,6 +153,10 @@
 				TargetAttributes = {
 					623411602EFCE13800FB66E3 = {
 						CreatedOnToolsVersion = 26.2;
+					};
+					62A0C1052F9C7D0000D1E7A5 = {
+						CreatedOnToolsVersion = 26.2;
+						TestTargetID = 623411602EFCE13800FB66E3;
 					};
 				};
 			};
@@ -123,12 +175,20 @@
 			projectRoot = "";
 			targets = (
 				623411602EFCE13800FB66E3 /* WithYou */,
+				62A0C1052F9C7D0000D1E7A5 /* WithYouTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		6234115F2EFCE13800FB66E3 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		62A0C1062F9C7D0000D1E7A5 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -145,7 +205,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		62A0C1072F9C7D0000D1E7A5 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		62A0C1082F9C7D0000D1E7A5 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 623411602EFCE13800FB66E3 /* WithYou */;
+			targetProxy = 62A0C1012F9C7D0000D1E7A5 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		6234116A2EFCE13A00FB66E3 /* Debug */ = {
@@ -282,7 +357,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = WithYou/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "WithYou: Focus for ADHD";
+				INFOPLIST_KEY_CFBundleDisplayName = WithYou;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -295,6 +370,11 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.3;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-weak_framework",
+					FoundationModels,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.commongenelabs.WithYou;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -321,7 +401,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = WithYou/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "WithYou: Focus for ADHD";
+				INFOPLIST_KEY_CFBundleDisplayName = WithYou;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -334,6 +414,11 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.3;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-weak_framework",
+					FoundationModels,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.commongenelabs.WithYou;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -344,6 +429,50 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		62A0C1092F9C7D0000D1E7A5 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = BBHVK523SW;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.commongenelabs.WithYouTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/WithYou.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/WithYou";
+			};
+			name = Debug;
+		};
+		62A0C10A2F9C7D0000D1E7A5 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = BBHVK523SW;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.commongenelabs.WithYouTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/WithYou.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/WithYou";
 			};
 			name = Release;
 		};
@@ -364,6 +493,15 @@
 			buildConfigurations = (
 				6234116D2EFCE13A00FB66E3 /* Debug */,
 				6234116E2EFCE13A00FB66E3 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		62A0C10B2F9C7D0000D1E7A5 /* Build configuration list for PBXNativeTarget "WithYouTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				62A0C1092F9C7D0000D1E7A5 /* Debug */,
+				62A0C10A2F9C7D0000D1E7A5 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

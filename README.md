@@ -106,11 +106,13 @@ If a feature violates these, it does not ship.
 
 -   Time-aware parsing:
 
--   If a time is detected → scheduled
+    -   If a time is detected → scheduled
 
--   If not → Inbox
+    -   If not → Inbox
 
--   During Focus Sessions → routed to Focus Dump
+    -   During Focus Sessions → routed to Focus Dump
+
+-   A live preview shows where a thought will go before you save it, and every save can be undone
 
 Language is minimal:
 
@@ -147,7 +149,7 @@ Each reminder includes:
 
 -   A suggested start step
 
--   Gentle notification actions
+-   Gentle notification actions: I'm starting / Help me start / In 10 minutes / Tomorrow morning
 
 No red text. No overdue panic.
 
@@ -187,7 +189,7 @@ A micro-reset for spirals and distraction:
 
 -   30-second timer
 
--   Guided breathing
+-   Guided breathing, with optional breathing haptics you can follow with your eyes closed
 
 -   A short mantra (profile-based)
 
@@ -197,7 +199,7 @@ Accessible anywhere in the app.
 
 ### Profiles
 
-Profiles allow personalization without complexity:
+Profiles live in Settings (the gear on Today) and allow personalization without complexity:
 
 -   Name
 
@@ -264,25 +266,55 @@ WithYou is currently in early TestFlight testing.
 
 What's implemented today:
 
+-   Tab-based navigation: Today / Focus / Inbox / Schedule / Capture
+
+-   Settings (profile, tone, default times, appearance, notifications, privacy) behind the gear on Today
+
 -   Capture → Inbox → Reminder flow
 
 -   Focus Sessions with:
 
-  -   Brain dump
+    -   Brain dump
 
-  -   Pause / resume
+    -   Pause / resume
 
-  -   Extend time
+    -   Extend time
 
-  -   Wrap-up review
+    -   Wrap-up review
 
 -   Gentle focus-end notifications
 
 -   Refocus (30-second reset)
 
+-   "I'm stuck" mode
+
 -   Profiles for personalization
 
--   Tab-based navigation (Today / Focus / Inbox / Capture / Profiles)
+### New in this build
+
+-   **Gentle, contextual notification permission.** WithYou doesn't ask at launch. It asks the first time you schedule something, when the reason is obvious.
+
+-   **Notification actions that work.** Reminders offer *I'm starting*, *Help me start*, *In 10 minutes* and *Tomorrow morning*. The focus-end notification offers *Wrap up*.
+
+-   **Live capture preview + Undo.** While you type, Capture shows where the thought will go (Inbox, or a time). Every save can be undone.
+
+-   **Smarter time parsing.** "Call mom at 3pm" said after 3pm means tomorrow. "Tonight", "tomorrow morning", "noon" and "in 20 minutes" all work. A day that already went by ("yesterday") goes to the Inbox instead of into the past.
+
+-   **Energy check-in.** An optional "Energy today" choice on Today. On a low-energy day, Today suggests only the smallest thing. It quietly resets each morning.
+
+-   **"Let today rest."** In the evening, one tap moves what's left today to tomorrow morning. Undo is right there.
+
+-   **On-device "Make it smaller."** On iOS 26+ with Apple Intelligence, Apple's on-device model suggests a tinier first step. Everywhere else, simple built-in rules do. Nothing leaves your iPhone.
+
+-   **Siri / Shortcuts:** Capture, Start focus, Refocus, I'm stuck.
+
+-   **Welcome screens** on first launch.
+
+-   **Keep screen awake** during focus (a toggle in Settings).
+
+-   **Breathing haptics** in Refocus.
+
+-   **Privacy toggle.** Turning off server sharing in Settings deletes this iPhone's record from WithYou's server.
 
 What's intentionally not finished yet:
 
@@ -294,7 +326,7 @@ What's intentionally not finished yet:
 
 -   Advanced Siri / Shortcuts
 
--   Energy-aware features
+-   Energy insights over time
 
 If something feels incomplete, that's expected --- this phase is about: Does this feel emotionally safe? Does it reduce friction?
 
@@ -378,6 +410,57 @@ Helpful feedback questions:
 
 You're not testing productivity. You're testing emotional load.
 
+* * * * *
+
+## 🛠 Development
+--------------
+
+### Requirements
+
+-   Xcode 26 (the app uses iOS 26 APIs behind `#available` checks)
+
+-   Deployment target: iOS 17.6
+
+### Secrets.swift setup
+
+The backend API key lives in `WithYou/Config/Secrets.swift`, which is gitignored and must never be committed. Create it before your first build:
+
+```sh
+cp Config/Secrets.swift.example WithYou/Config/Secrets.swift
+```
+
+It contains a single value:
+
+```swift
+enum Secrets {
+    static let apiKey = "..."
+}
+```
+
+An empty string (`""`) means "no key": the app builds and runs, and simply doesn't send an API-key header to the backend. If the build fails with "cannot find 'Secrets' in scope", this file is missing. The template sits outside `WithYou/` on purpose: that folder is a synchronized group, so any `.swift` file in it is compiled into the app.
+
+The backend URL comes from `WithYou/Config/WithYou.xcconfig`. Local overrides go in `WithYou/Config/WithYou.local.xcconfig` (also gitignored).
+
+### Running tests
+
+Unit tests live in `WithYouTests/` (XCTest, hosted in the app). In Xcode, choose the shared **WithYou** scheme and press ⌘U. From the command line:
+
+```sh
+xcodebuild -project WithYou.xcodeproj -scheme WithYou \
+  -destination 'platform=iOS Simulator,name=iPhone 17' \
+  CODE_SIGNING_ALLOWED=NO test
+```
+
+(Use any iPhone simulator you have installed; `xcrun simctl list devices available` lists them.)
+
+The tests cover capture parsing, focus timer math, reminder copy and time helpers, date formatting, and the "Make it smaller" fallback rules.
+
+### CI
+
+`.github/workflows/ios-ci.yml` runs the tests on every pull request and on every push to `main`, on a GitHub-hosted macOS runner. It creates a stub `Secrets.swift` (empty key), picks an available iPhone simulator, and runs the WithYou scheme's tests. If they fail, the `.xcresult` bundle is uploaded as a build artifact.
+
+For contribution guidelines, see [CONTRIBUTING.md](CONTRIBUTING.md). For how the code is organized, see [ARCHITECTURE.md](ARCHITECTURE.md).
+
 ## Legal
-- Privacy Policy: https://elaiken3.github.io/withyou/privacy
-- Support: https://elaiken3.github.io/withyou/support
+- Privacy Policy: https://wearewithyou.app/privacy/
+- Support: https://wearewithyou.app/support/

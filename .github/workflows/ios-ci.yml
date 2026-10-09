@@ -1,0 +1,107 @@
+# Builds the app and runs the WithYouTests unit tests on an iPhone simulator.
+#
+# macOS runner minutes are free for public repositories, so this runs on every
+# pull request and on every push to main.
+name: iOS CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: macos-26
+    timeout-minutes: 40
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Create stub Secrets.swift
+        # The real file is gitignored. An empty key means "no key" (no header is sent).
+        run: |
+          if [ ! -f WithYou/Config/Secrets.swift ]; then
+            mkdir -p WithYou/Config
+            printf 'enum Secrets {\n    static let apiKey = ""\n}\n' > WithYou/Config/Secrets.swift
+            echo "Created stub WithYou/Config/Secrets.swift"
+          fi
+
+      - name: Pick an iPhone simulator
+        id: simulator
+        run: |
+          xcrun simctl list devices available -j > "$RUNNER_TEMP/devices.json"
+          SDK_VERSION="$(xcrun --sdk iphonesimulator --show-sdk-version)"
+          python3 - "$RUNNER_TEMP/devices.json" "$SDK_VERSION" <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          import re
+          import sys
+
+          devices = json.load(open(sys.argv[1]))["devices"]
+
+          def version(text):
+              return tuple(int(part) for part in re.findall(r"\d+", text))
+
+          sdk = version(sys.argv[2])
+          candidates = []
+          for runtime, entries in devices.items():
+              match = re.search(r"SimRuntime\.iOS-([\d-]+)$", runtime)
+              if not match:
+                  continue
+              runtime_version = version(match.group(1))
+              iphones = [d for d in entries if d.get("isAvailable", True) and d["name"].startswith("iPhone")]
+              if iphones:
+                  candidates.append((runtime_version, iphones[0]))
+
+          if not candidates:
+              sys.exit("No available iPhone simulator found")
+
+          # Newest iOS runtime the installed SDK can build for (fall back to the newest overall).
+          supported = [c for c in candidates if c[0][:2] <= sdk[:2]] or candidates
+          runtime_version, device = max(supported, key=lambda c: c[0])
+          label = ".".join(str(part) for part in runtime_version)
+          print(f"Using {device['name']} (iOS {label}) {device['udid']}", file=sys.stderr)
+          print(f"udid={device['udid']}")
+          print(f"name={device['name']} (iOS {label})")
+          PY
+
+      - name: Build and run tests
+        env:
+          UDID: ${{ steps.simulator.outputs.udid }}
+          SIMULATOR_NAME: ${{ steps.simulator.outputs.name }}
+        run: |
+          set -o pipefail
+          echo "Destination: $SIMULATOR_NAME ($UDID)"
+          if command -v xcbeautify >/dev/null 2>&1; then
+            FORMAT=(xcbeautify --renderer github-actions)
+          else
+            FORMAT=(cat)
+          fi
+          xcodebuild \
+            -project WithYou.xcodeproj \
+            -scheme WithYou \
+            -destination "id=$UDID" \
+            -configuration Debug \
+            -resultBundlePath "$RUNNER_TEMP/WithYouTests.xcresult" \
+            CODE_SIGNING_ALLOWED=NO \
+            test 2>&1 | "${FORMAT[@]}"
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WithYouTests-xcresult
+          path: ${{ runner.temp }}/WithYouTests.xcresult
+          if-no-files-found: ignore
+          retention-days: 7
