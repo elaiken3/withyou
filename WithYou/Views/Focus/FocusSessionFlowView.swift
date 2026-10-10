@@ -88,6 +88,10 @@ struct FocusSessionFlowView: View {
             customDurationSheet
                 .presentationBackground(Color.appBackground)
         }
+        // Another screen needs its sheet up (see `AppRouter.closeAllSheets()`).
+        .onChange(of: AppRouter.shared.closeSheetsRequest) { _, _ in
+            showCustomDurationSheet = false
+        }
     }
 
     @ViewBuilder

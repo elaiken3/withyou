@@ -186,6 +186,10 @@ struct TodayView: View {
         .onChange(of: AppRouter.shared.pendingRoute) { _, _ in
             handlePendingRoute()
         }
+        // Another screen needs its sheet up (see `AppRouter.closeAllSheets()`).
+        .onChange(of: AppRouter.shared.closeSheetsRequest) { _, _ in
+            closeSheets()
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { now = Date() }
         }
@@ -738,24 +742,30 @@ struct TodayView: View {
             || editingReminder != nil || editingInboxItem != nil
     }
 
-    /// Only one sheet can be up at a time: close whatever is open first, then present.
+    /// Only one sheet can be up at a time, and other screens (voice capture, Refocus, the other
+    /// tabs) present their own: close whatever is open anywhere first, then present.
     private func present(_ sheet: RoutedSheet) {
-        guard isPresentingSheet else {
+        guard isPresentingSheet || AppRouter.shared.isSheetUp else {
             show(sheet)
             return
         }
 
+        closeSheets()
+        AppRouter.shared.closeAllSheets()
+
+        Task {
+            try? await Task.sleep(for: .milliseconds(500))
+            show(sheet)
+        }
+    }
+
+    private func closeSheets() {
         showRefocus = false
         showProfiles = false
         stuckPresentation = nil
         schedulingInboxItem = nil
         editingReminder = nil
         editingInboxItem = nil
-
-        Task {
-            try? await Task.sleep(for: .milliseconds(500))
-            show(sheet)
-        }
     }
 
     private func show(_ sheet: RoutedSheet) {

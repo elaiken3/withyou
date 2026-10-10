@@ -306,7 +306,7 @@ What's implemented today:
 
 -   **"Break it down."** A few tiny steps for a task, in Inbox, Today, "I'm stuck" and the edit sheets. Tap one to make it the first step, with Undo where it's saved straight away.
 
--   **Voice capture.** Tap the mic in Capture, say "Brain dump in WithYou", or bind the Voice capture shortcut to the Action Button. Your words appear as you speak, and WithYou sorts them into items you look over before anything is saved. "Capture in WithYou" with Siri saves right away and tells you what it saved.
+-   **Voice capture.** Tap the mic in Capture, say "Brain dump in WithYou", or bind the Voice capture shortcut to the Action Button. Your words appear as you speak, and WithYou sorts them into items you look over before anything is saved (during a focus session, they're parked in its brain dump instead). "Capture in WithYou" with Siri saves right away and tells you what it saved.
 
 -   **AI help that suggests, never acts.** "Sort it out for me" in Capture, "Break it down", a gentler "I'm stuck", "Help me pick" on Today, and tidying brain-dump thoughts after focus. Each shows one suggestion; you choose what to keep. On iPhones with Apple Intelligence (iOS 26+) it runs on the device. Cloud AI is off by default and can be turned on in Settings. Without either, simple built-in rules do the same jobs, more simply.
 

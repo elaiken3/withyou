@@ -17,8 +17,11 @@ struct RootView: View {
     @State private var selectedTab: AppTab = .today
     @State private var showRefocus = false
     @State private var showVoiceCapture = false
-    /// What the last voice capture saved; shown as a toast once its sheet has closed.
-    @State private var voiceSaveSummary: CaptureSaveSummary?
+    /// How the next voice capture opens: empty and listening from a route, or with the words
+    /// Undo gave back and the mic off.
+    @State private var voiceStart = VoiceStart()
+    /// What the last voice capture saved, and its words; shown as a toast once its sheet has closed.
+    @State private var voiceSave: VoiceSave?
     @State private var toast: Toast?
     @State private var showWelcome = false
     @State private var didRunLaunchSetup = false
@@ -54,9 +57,16 @@ struct RootView: View {
             RefocusView()
         }
         .sheet(isPresented: $showVoiceCapture, onDismiss: showVoiceSaveToast) {
-            VoiceCaptureView { summary in
-                voiceSaveSummary = summary
-            }
+            VoiceCaptureView(
+                initialText: voiceStart.text,
+                autoStart: voiceStart.autoStart,
+                onSaved: { summary, words in
+                    voiceSave = VoiceSave(summary: summary, words: words)
+                },
+                onClose: { words in
+                    offerClosedWords(words)
+                }
+            )
         }
         // Sits above the tab bar. Only the toast itself takes touches.
         .overlay(alignment: .bottom) {
@@ -81,6 +91,11 @@ struct RootView: View {
         }
         .onChange(of: router.pendingRoute) { _, route in
             handle(route)
+        }
+        // Another screen needs its sheet up (see `AppRouter.closeAllSheets()`).
+        .onChange(of: router.closeSheetsRequest) { _, _ in
+            showRefocus = false
+            showVoiceCapture = false
         }
         // `withyou://voice` and friends (the `withyou` scheme is registered in Info.plist).
         .onOpenURL { url in
@@ -153,7 +168,7 @@ struct RootView: View {
             router.consume()
         case .refocus:
             router.consume()
-            showRefocus = true
+            presentRefocus()
         case .startFocus(let reminderId):
             router.consume()
             startFocus(forReminder: reminderId)
@@ -166,30 +181,88 @@ struct RootView: View {
         }
     }
 
-    // MARK: - Voice capture
+    // MARK: - Sheets
 
-    private func presentVoiceCapture() {
-        guard !showVoiceCapture else { return }
-        // One sheet at a time: let Refocus close first.
-        guard showRefocus else {
-            showVoiceCapture = true
+    private enum RootSheet {
+        case refocus
+        case voiceCapture
+    }
+
+    /// Only one sheet can be up at a time, and the tabs present their own. When anything is
+    /// up (here or in a tab), everything is asked to close first, then the sheet is shown.
+    private func present(_ sheet: RootSheet) {
+        guard showRefocus || showVoiceCapture || router.isSheetUp else {
+            show(sheet)
             return
         }
-        showRefocus = false
+        // Also closes Refocus and voice capture here (see `onChange(of: closeSheetsRequest)`).
+        router.closeAllSheets()
         Task {
             try? await Task.sleep(for: .milliseconds(500))
+            show(sheet)
+        }
+    }
+
+    private func show(_ sheet: RootSheet) {
+        switch sheet {
+        case .refocus:
+            showRefocus = true
+        case .voiceCapture:
             showVoiceCapture = true
         }
     }
 
+    private func presentRefocus() {
+        guard !showRefocus else { return }
+        // Someone is talking: don't close their words away for Refocus.
+        guard !router.isVoiceCaptureOpen else { return }
+        present(.refocus)
+    }
+
+    // MARK: - Voice capture
+
+    private struct VoiceStart {
+        var text = ""
+        var autoStart = true
+    }
+
+    private struct VoiceSave {
+        let summary: CaptureSaveSummary
+        let words: String
+    }
+
+    /// From a route (empty, listening right away), or from Undo (the words back, mic off).
+    private func presentVoiceCapture(initialText: String = "", autoStart: Bool = true) {
+        // Already open, here or in Capture: leave it, and the words in it, alone.
+        guard !router.isVoiceCaptureOpen else { return }
+        voiceStart = VoiceStart(text: initialText, autoStart: autoStart)
+        present(.voiceCapture)
+    }
+
     private func showVoiceSaveToast() {
-        guard let summary = voiceSaveSummary else { return }
-        voiceSaveSummary = nil
+        guard let save = voiceSave else { return }
+        voiceSave = nil
         toast = Toast(
-            text: CaptureSaver.message(for: summary),
+            text: CaptureSaver.message(for: save.summary),
             actionTitle: "Undo",
             action: {
-                CaptureSaver.undo(summary, in: context)
+                CaptureSaver.undo(save.summary, in: context)
+                // Nothing is lost: the words come back to look over (or say more).
+                if !save.words.isEmpty {
+                    presentVoiceCapture(initialText: save.words, autoStart: false)
+                }
+            }
+        )
+    }
+
+    /// Voice capture closed without saving. Its words can come back with Undo.
+    private func offerClosedWords(_ words: String) {
+        guard !words.isEmpty else { return }
+        toast = Toast(
+            text: "Closed without saving.",
+            actionTitle: "Undo",
+            action: {
+                presentVoiceCapture(initialText: words, autoStart: false)
             }
         )
     }

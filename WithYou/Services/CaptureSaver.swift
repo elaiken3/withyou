@@ -4,6 +4,7 @@
 //
 //  Saves capture suggestions the person reviewed (or asked Siri to save):
 //  ones with a time become scheduled reminders, the rest go to the Inbox.
+//  During a focus session, a capture can be parked in its brain dump instead.
 //
 
 import Foundation
@@ -14,10 +15,13 @@ struct CaptureSaveSummary: Equatable {
     var inboxItemIds: [UUID] = []
     var reminderIds: [UUID] = []
     var scheduledDates: [Date] = []
+    /// Parked in a focus session's brain dump (see `CaptureSaver.park`).
+    var focusDumpItemIds: [UUID] = []
 
     var inboxCount: Int { inboxItemIds.count }
     var scheduledCount: Int { reminderIds.count }
-    var totalCount: Int { inboxCount + scheduledCount }
+    var focusDumpCount: Int { focusDumpItemIds.count }
+    var totalCount: Int { inboxCount + scheduledCount + focusDumpCount }
     var firstScheduledAt: Date? { scheduledDates.min() }
 }
 
@@ -129,11 +133,34 @@ enum CaptureSaver {
             .joined(separator: " ")
     }
 
+    // MARK: - Focus brain dump
+
+    /// The running focus session captures go to, or nil. Like Siri and QuickAdd's Save, a
+    /// capture during focus is parked in the session's brain dump while "Send captures to
+    /// Brain Dump during focus" is on (the default).
+    static func focusSessionForCaptures(profile: UserProfile?, in context: ModelContext) -> FocusSession? {
+        guard profile?.routeSiriToFocusDumpWhenActive ?? true else { return nil }
+        return FocusSessionStore.activeSession(in: context)
+    }
+
+    /// Parks `text` in a focus session's brain dump, as one thought.
+    static func park(_ text: String, inSessionWithId sessionId: UUID, in context: ModelContext) throws -> CaptureSaveSummary {
+        let item = FocusDumpItem(text: text, sessionId: sessionId)
+        context.insert(item)
+        do {
+            try context.save()
+        } catch {
+            context.delete(item)
+            throw error
+        }
+        return CaptureSaveSummary(focusDumpItemIds: [item.id])
+    }
+
     // MARK: - Undo
 
     /// Removes everything `summary` created (Undo, or a save that failed partway).
     static func undo(_ summary: CaptureSaveSummary, in context: ModelContext) {
-        var removedInboxItem = false
+        var removedItem = false
         for id in summary.inboxItemIds {
             var descriptor = FetchDescriptor<InboxItem>(
                 predicate: #Predicate<InboxItem> { (item: InboxItem) in item.id == id }
@@ -141,10 +168,20 @@ enum CaptureSaver {
             descriptor.fetchLimit = 1
             if let item = (try? context.fetch(descriptor))?.first {
                 context.delete(item)
-                removedInboxItem = true
+                removedItem = true
             }
         }
-        if removedInboxItem {
+        for id in summary.focusDumpItemIds {
+            var descriptor = FetchDescriptor<FocusDumpItem>(
+                predicate: #Predicate<FocusDumpItem> { (item: FocusDumpItem) in item.id == id }
+            )
+            descriptor.fetchLimit = 1
+            if let item = (try? context.fetch(descriptor))?.first {
+                context.delete(item)
+                removedItem = true
+            }
+        }
+        if removedItem {
             try? context.save()
         }
 
@@ -170,6 +207,10 @@ enum CaptureSaver {
         let inbox = summary.inboxCount
         let scheduled = summary.scheduledCount
         let when = summary.firstScheduledAt?.friendlyDayTime ?? ""
+
+        if inbox == 0, scheduled == 0, summary.focusDumpCount > 0 {
+            return "Parked in your focus session."
+        }
 
         switch (inbox, scheduled) {
         case (0, 0):

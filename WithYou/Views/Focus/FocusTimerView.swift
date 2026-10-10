@@ -153,6 +153,15 @@ struct FocusTimerView: View {
         } message: {
             Text("Stopping still counts.")
         }
+        // Another screen needs its sheet up (see `AppRouter.closeAllSheets()`). A thought
+        // being typed stays in `thoughtText`.
+        .onChange(of: AppRouter.shared.closeSheetsRequest) { _, _ in
+            wrapUpAfterTimeUpSheet = false
+            showAddThought = false
+            showRefocus = false
+            showTimeUpSheet = false
+            confirmEnd = false
+        }
     }
 
     // MARK: - Pieces

@@ -18,9 +18,14 @@ struct VoiceCaptureView: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// Called with what was saved, just before the sheet closes, so the presenter can
-    /// show a toast with Undo.
-    let onSaved: (CaptureSaveSummary) -> Void
+    /// Called with what was saved and the words it came from, just before the sheet closes,
+    /// so the presenter can show a toast whose Undo puts the words back.
+    let onSaved: (CaptureSaveSummary, String) -> Void
+    /// Called once with the words (trimmed, maybe empty) when the sheet closes without saving,
+    /// so the presenter can give them back.
+    let onClose: (String) -> Void
+    /// Whether the mic opens by itself. Off when reopening with words to look over.
+    let autoStart: Bool
 
     @State private var transcriber = SpeechTranscriber()
     @State private var draft = ""
@@ -28,14 +33,29 @@ struct VoiceCaptureView: View {
     @State private var showReview = false
     @State private var reviewSuggestions: [CaptureSuggestion] = []
     @State private var reviewSource: AISource = .rules
+    /// The words the review was made from; handed back with what was saved.
+    @State private var sortedWords = ""
+    /// Saved or closed: the presenter has been told, so closing says nothing more.
+    @State private var didFinish = false
+    /// A focus session is running, so Done parks the words in its brain dump.
+    @State private var parksInFocus = false
+    @State private var errorMessage: String?
     @State private var hint = VoiceCaptureView.hints.randomElement() ?? VoiceCaptureView.hints[0]
 
     @FocusState private var isEditorFocused: Bool
     @ScaledMetric(relativeTo: .title) private var micDiameter: CGFloat = 96
 
-    /// `initialText` is anything already typed; new words are added after it.
-    init(initialText: String = "", onSaved: @escaping (CaptureSaveSummary) -> Void = { _ in }) {
+    /// `initialText` is anything already typed (or words given back by Undo); new words are
+    /// added after it.
+    init(
+        initialText: String = "",
+        autoStart: Bool = true,
+        onSaved: @escaping (CaptureSaveSummary, String) -> Void = { _, _ in },
+        onClose: @escaping (String) -> Void = { _ in }
+    ) {
+        self.autoStart = autoStart
         self.onSaved = onSaved
+        self.onClose = onClose
         _draft = State(initialValue: initialText)
     }
 
@@ -67,6 +87,20 @@ struct VoiceCaptureView: View {
 
                         transcriptArea
 
+                        if let errorMessage {
+                            Text(errorMessage)
+                                .font(.footnote)
+                                .foregroundStyle(.appSecondaryText)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        if parksInFocus {
+                            Label("You’re focusing, so Done parks this in your brain dump.", systemImage: "tray")
+                                .font(.footnote)
+                                .foregroundStyle(.appSecondaryText)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
                         if isDraftEmpty && transcriber.issue == nil {
                             Text(hint)
                                 .font(.footnote)
@@ -94,7 +128,7 @@ struct VoiceCaptureView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Close") {
                         Haptics.tap()
-                        transcriber.cancel()
+                        finishWithoutSaving()
                         dismiss()
                     }
                 }
@@ -115,17 +149,29 @@ struct VoiceCaptureView: View {
                     source: reviewSource,
                     itemSource: .app
                 ) { summary in
-                    onSaved(summary)
-                    dismiss()
+                    finishSaved(summary, words: sortedWords)
                 }
             }
         }
         .tint(.appAccent)
+        // Words are only let go with Close (which offers them back), never by a stray swipe.
+        .interactiveDismissDisabled(!isDraftEmpty || isSorting || transcriber.isActive)
         // Opening voice capture means "listen": start right away (asks for permission the first time).
         .task {
-            await startListening()
+            if autoStart {
+                await startListening()
+            }
+        }
+        .onAppear {
+            AppRouter.shared.isVoiceCaptureOpen = true
+            let profile = ProfileStore.activeProfile(in: context)
+            parksInFocus = CaptureSaver.focusSessionForCaptures(profile: profile, in: context) != nil
         }
         .onDisappear {
+            AppRouter.shared.isVoiceCaptureOpen = false
+            // Closed some other way (for example, to make room for another screen):
+            // the words still go back to the presenter.
+            finishWithoutSaving()
             transcriber.cancel()
         }
         .onChange(of: scenePhase) { _, phase in
@@ -261,14 +307,16 @@ struct VoiceCaptureView: View {
                 if isSorting {
                     ProgressView()
                 }
-                Text(isSorting ? "Sorting it out…" : "Done")
+                Text(isSorting ? (parksInFocus ? "Saving…" : "Sorting it out…") : "Done")
             }
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(.borderedProminent)
         .controlSize(.large)
         .disabled(isDraftEmpty || isSorting || transcriber.state == .preparing)
-        .accessibilityHint("Sorts your words into items you can check before saving.")
+        .accessibilityHint(parksInFocus
+            ? "Parks your words in your focus session’s brain dump."
+            : "Sorts your words into items you can check before saving.")
         .padding(.horizontal)
         .padding(.vertical, 10)
         .background(Color.appBackground)
@@ -293,14 +341,40 @@ struct VoiceCaptureView: View {
         await transcriber.start(continuing: draft)
     }
 
+    /// Tells the presenter what was saved (and from which words), then closes.
+    private func finishSaved(_ summary: CaptureSaveSummary, words: String) {
+        didFinish = true
+        onSaved(summary, words)
+        dismiss()
+    }
+
+    /// Gives the words back to the presenter, once. Called by Close and when the sheet goes away.
+    private func finishWithoutSaving() {
+        guard !didFinish else { return }
+        didFinish = true
+        // While listening, the transcriber may be a word ahead of the screen.
+        let hearing = transcriber.state == .listening || transcriber.state == .finishing
+        let latest = hearing ? transcriber.text : draft
+        let words = latest.trimmingCharacters(in: .whitespacesAndNewlines)
+        transcriber.cancel()
+        onClose(words)
+    }
+
     /// Stops listening, asks AI (or the rules) to sort the words, and opens the review.
+    /// During a focus session the words are parked in its brain dump instead, as with Siri.
     private func sortItOut() async {
         guard !isSorting else { return }
         isEditorFocused = false
         isSorting = true
+        errorMessage = nil
 
         let wasListening = transcriber.isActive
         await transcriber.finishListening()
+        // Closed while the last words were arriving: the words already went back.
+        guard !didFinish else {
+            isSorting = false
+            return
+        }
         if wasListening {
             draft = transcriber.text
         }
@@ -312,7 +386,26 @@ struct VoiceCaptureView: View {
         }
 
         let profile = ProfileStore.activeProfile(in: context)
+
+        // "Send captures to Brain Dump during focus" (on unless the person turned it off).
+        if let session = CaptureSaver.focusSessionForCaptures(profile: profile, in: context) {
+            do {
+                let summary = try CaptureSaver.park(words, inSessionWithId: session.id, in: context)
+                isSorting = false
+                finishSaved(summary, words: words)
+            } catch {
+                isSorting = false
+                errorMessage = "Couldn’t save that just now. Try again."
+            }
+            return
+        }
+
+        sortedWords = words
         let result = await AIService.capture(words, context: CaptureContext.current(profile: profile))
+        guard !didFinish else {
+            isSorting = false
+            return
+        }
         if result.value.isEmpty {
             reviewSuggestions = CaptureSaver.rulesSuggestions(for: words, profile: profile)
             reviewSource = .rules

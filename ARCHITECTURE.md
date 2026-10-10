@@ -88,6 +88,7 @@ The schema is currently unversioned. **Before the next model change**, introduce
 - `RootView` observes `pendingRoute`. It handles the tab routes, `.refocus`, `.startFocus` and `.voiceCapture` (a sheet), then calls `consume()`.
 - For `.stuck` and `.reminder`, `RootView` only switches to Today and leaves the route pending. `TodayView` presents the sheet and calls `consume()`.
 - Views also check `pendingRoute` in `onAppear`, because a cold launch from a notification sets the route before any view exists.
+- Only one sheet can be up at a time, and each tab presents its own. A route that needs a sheet checks `isSheetUp`; if anything is up, it calls `closeAllSheets()` and presents a moment later. Every view that presents sheets observes `closeSheetsRequest` and closes them. An open voice capture is never closed for another voice capture or Refocus, and when it does close without saving, its words come back (into Capture's editor, or with Undo on a toast).
 
 ### NotificationManager
 
@@ -148,7 +149,7 @@ Simple, offline small steps: `ruleBasedStep` (one first step, never the one you 
 ### Voice capture
 
 - `SpeechTranscriber` (`Services/Voice/`): live speech-to-text with `SFSpeechRecognizer` and `AVAudioEngine`, on device whenever the iPhone supports it for the language. Stops after a short silence or 60 seconds and releases the audio session.
-- `VoiceCaptureView` and `CaptureReviewView` (`Views/Capture/`): speak, then review the sorted items before saving.
+- `VoiceCaptureView` and `CaptureReviewView` (`Views/Capture/`): speak, then review the sorted items before saving. During a focus session (with "Send captures to Brain Dump during focus" on), Done parks the words in the session's brain dump instead, like Siri and Save. Undo after saving, and Close, give the words back.
 - `CaptureSaver`: saves reviewed suggestions (timed ones through `ReminderStore.createAndSchedule`, the rest as Inbox items) and can undo exactly that save.
 
 ### Other services

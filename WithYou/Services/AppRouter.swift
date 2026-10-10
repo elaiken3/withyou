@@ -5,6 +5,7 @@
 
 import Foundation
 import Observation
+import UIKit
 
 /// Places the app can be asked to open from outside a view:
 /// notification taps/actions, App Intents, and deep links.
@@ -35,13 +36,40 @@ enum AppRoute: Equatable {
 ///   the route pending; `TodayView` presents the sheet and calls `consume()`.
 /// - Views must also check `pendingRoute` in `onAppear`, because a cold launch from a
 ///   notification sets the route before any view exists.
+/// - Only one sheet can be up at a time, and views present their own. A route that needs a
+///   sheet checks `isSheetUp`; if something is up it calls `closeAllSheets()` and presents a
+///   moment later. Every view that presents sheets observes `closeSheetsRequest` and closes them.
 @Observable
 final class AppRouter {
     static let shared = AppRouter()
 
     var pendingRoute: AppRoute?
 
+    /// Bumped by `closeAllSheets()`. Views that present sheets close them when it changes.
+    private(set) var closeSheetsRequest = 0
+
+    /// True while voice capture is on screen (from a route or from Capture). Another voice
+    /// capture request leaves it, and the words in it, alone.
+    @ObservationIgnored var isVoiceCaptureOpen = false
+
     private init() {}
+
+    /// Asks every view to close the sheets it presents, so a route can show its own.
+    func closeAllSheets() {
+        closeSheetsRequest += 1
+    }
+
+    /// True while a sheet or dialog is up anywhere in the app. Views present their own sheets,
+    /// so this asks the window instead of keeping count view by view.
+    var isSheetUp: Bool {
+        for scene in UIApplication.shared.connectedScenes {
+            guard let windowScene = scene as? UIWindowScene else { continue }
+            for window in windowScene.windows where window.rootViewController?.presentedViewController != nil {
+                return true
+            }
+        }
+        return false
+    }
 
     func open(_ route: AppRoute) {
         pendingRoute = route

@@ -215,6 +215,31 @@ final class CaptureSaverTests: XCTestCase {
         withExtendedLifetime(container) {}
     }
 
+    // MARK: - Focus brain dump
+
+    func testParkingInAFocusSessionCanBeUndone() throws {
+        let container = try ModelContainer(
+            for: FocusDumpItem.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        let context = ModelContext(container)
+        let sessionId = UUID()
+
+        let summary = try CaptureSaver.park("Call the dentist and buy oat milk", inSessionWithId: sessionId, in: context)
+
+        let parked = try context.fetch(FetchDescriptor<FocusDumpItem>())
+        XCTAssertEqual(parked.map { $0.text }, ["Call the dentist and buy oat milk"], "Kept as one thought, as said")
+        XCTAssertEqual(parked.first?.sessionId, sessionId)
+        XCTAssertEqual(summary.focusDumpItemIds, parked.map { $0.id })
+        XCTAssertEqual(summary.totalCount, 1)
+        XCTAssertEqual(CaptureSaver.message(for: summary), "Parked in your focus session.")
+
+        CaptureSaver.undo(summary, in: context)
+
+        XCTAssertTrue(try context.fetch(FetchDescriptor<FocusDumpItem>()).isEmpty)
+        withExtendedLifetime(container) {}
+    }
+
     // MARK: - Tidying
 
     func testPreparedFallsBackToTheOriginalWords() throws {

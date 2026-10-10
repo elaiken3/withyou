@@ -97,6 +97,12 @@ struct InboxDetailView: View {
         } message: {
             Text("You don’t have to do everything.")
         }
+        // Another screen needs its sheet up (see `AppRouter.closeAllSheets()`).
+        .onChange(of: AppRouter.shared.closeSheetsRequest) { _, _ in
+            showSchedule = false
+            showEdit = false
+            confirmLetGo = false
+        }
     }
 
     // MARK: - Content
