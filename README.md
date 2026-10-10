@@ -284,7 +284,7 @@ What's implemented today:
 
 -   Gentle focus-end notifications
 
--   Refocus (30-second reset)
+-   Refocus (one-minute breathing reset)
 
 -   "I'm stuck" mode
 

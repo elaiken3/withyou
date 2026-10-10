@@ -471,7 +471,7 @@ struct TodayView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
-                .accessibilityLabel("Refocus, 30 seconds")
+                .accessibilityLabel("Refocus, 1 minute")
             }
         }
     }
@@ -651,7 +651,7 @@ struct TodayView: View {
 
     @ViewBuilder
     private func resetButtons(_ state: TodayState) -> some View {
-        resetButton("Refocus (30 seconds)", systemImage: "wind") {
+        resetButton("Refocus (1 minute)", systemImage: "wind") {
             showRefocus = true
         }
 

@@ -14,7 +14,7 @@ enum AppRoute: Equatable {
     case inbox
     case schedule
     case capture
-    /// Present the 30-second Refocus sheet.
+    /// Present the Refocus breathing sheet (about a minute).
     case refocus
     /// Open Today and present "I'm stuck", optionally starting from a reminder.
     case stuck(reminderId: UUID?)

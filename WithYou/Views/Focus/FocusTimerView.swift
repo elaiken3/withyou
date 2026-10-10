@@ -264,7 +264,7 @@ struct FocusTimerView: View {
         }
         .buttonStyle(.bordered)
         .controlSize(.large)
-        .accessibilityHint("A 30 second breathing reset")
+        .accessibilityHint("A one-minute breathing reset")
     }
 
     private var addThoughtButton: some View {
