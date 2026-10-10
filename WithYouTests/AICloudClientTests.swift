@@ -487,6 +487,96 @@ final class AICloudClientTests: XCTestCase {
         XCTAssertEqual(AIStubURLProtocol.sent.last?.request.value(forHTTPHeaderField: "Authorization"), "Bearer token-3")
     }
 
+    func testRejectedEvenAfterSigningInAgainPausesCloudAI() async {
+        let client = makeClient(store: AIMemorySessionStore(validSession()))
+        let expiry = now.addingTimeInterval(3600)
+        AIStubURLProtocol.handler = { request, _ in
+            switch request.url?.path ?? "" {
+            case F.tokenPath:
+                return (200, [:], F.authReply(token: "token-2", refresh: "refresh-2", expiresAt: expiry))
+            case F.signUpPath:
+                return (200, [:], F.authReply(token: "token-3", refresh: "refresh-3", expiresAt: expiry))
+            default:
+                return (401, [:], F.unauthorizedReply)
+            }
+        }
+
+        await expectError(.unauthorized) {
+            _ = try await client.breakDown(title: "Email landlord", currentStep: "")
+        }
+        XCTAssertTrue(client.isPaused)
+
+        await expectError(.paused) {
+            _ = try await client.breakDown(title: "Email landlord", currentStep: "")
+        }
+        XCTAssertEqual(AIStubURLProtocol.count(path: F.signUpPath), 1, "Paused calls never create another account")
+    }
+
+    func testRefusedSignUpPausesCloudAI() async {
+        let client = makeClient(store: AIMemorySessionStore())
+        AIStubURLProtocol.handler = { request, _ in
+            if request.url?.path == F.signUpPath {
+                return (422, [:], F.json(#"{"code": 422, "msg": "Anonymous sign-ins are disabled"}"#))
+            }
+            return (200, [:], F.stepsReply)
+        }
+
+        await expectError(.unauthorized) {
+            _ = try await client.breakDown(title: "Email landlord", currentStep: "")
+        }
+        XCTAssertTrue(client.isPaused)
+        XCTAssertEqual(AIStubURLProtocol.count(path: F.functionPath), 0)
+    }
+
+    func testSignUpRateLimitPausesCloudAI() async {
+        let client = makeClient(store: AIMemorySessionStore())
+        AIStubURLProtocol.handler = { _, _ in
+            (429, ["Retry-After": "600"], F.json(#"{"code": 429, "msg": "Too many requests"}"#))
+        }
+
+        await expectError(.quotaExceeded(retryAfter: 600)) {
+            _ = try await client.breakDown(title: "Email landlord", currentStep: "")
+        }
+        XCTAssertEqual(client.pausedUntil, now.addingTimeInterval(600))
+    }
+
+    func testRefreshServerErrorKeepsTheAccount() async {
+        var expired = validSession()
+        expired.expiresAt = now.addingTimeInterval(-60)
+        let store = AIMemorySessionStore(expired)
+        let client = makeClient(store: store)
+        AIStubURLProtocol.handler = { request, _ in
+            if request.url?.path == F.tokenPath {
+                return (500, [:], F.json(#"{"error": "unexpected_failure"}"#))
+            }
+            return (200, [:], F.stepsReply)
+        }
+
+        await expectError(.server(status: 500)) {
+            _ = try await client.breakDown(title: "Email landlord", currentStep: "")
+        }
+        XCTAssertEqual(AIStubURLProtocol.count(path: F.signUpPath), 0, "A server hiccup never replaces the account")
+        XCTAssertEqual(AIStubURLProtocol.count(path: F.functionPath), 0)
+        XCTAssertEqual(store.stored, expired)
+    }
+
+    func testRejectedTokenWithRefreshServerErrorKeepsTheAccount() async {
+        let store = AIMemorySessionStore(validSession())
+        let client = makeClient(store: store)
+        AIStubURLProtocol.handler = { request, _ in
+            if request.url?.path == F.tokenPath {
+                return (503, [:], F.json(#"{"error": "unavailable"}"#))
+            }
+            return (401, [:], F.unauthorizedReply)
+        }
+
+        await expectError(.server(status: 503)) {
+            _ = try await client.breakDown(title: "Email landlord", currentStep: "")
+        }
+        XCTAssertEqual(AIStubURLProtocol.count(path: F.signUpPath), 0)
+        XCTAssertEqual(store.stored, validSession())
+    }
+
     func testQuotaPausesCloudAI() async {
         let store = AIMemorySessionStore(validSession())
         let client = makeClient(store: store)
@@ -578,5 +668,43 @@ final class AICloudClientTests: XCTestCase {
         XCTAssertFalse(deleted)
         XCTAssertNil(store.stored)
         XCTAssertEqual(AIStubURLProtocol.count(path: F.signUpPath), 0, "Deleting never creates a new account")
+    }
+
+    func testDeleteWithAnExpiredTokenAndARefreshServerErrorKeepsTheSession() async {
+        var expired = validSession()
+        expired.expiresAt = now.addingTimeInterval(-60)
+        let store = AIMemorySessionStore(expired)
+        let client = makeClient(store: store)
+        AIStubURLProtocol.handler = { request, _ in
+            if request.url?.path == F.tokenPath {
+                return (500, [:], F.json(#"{"error": "unexpected_failure"}"#))
+            }
+            return (200, [:], F.json(#"{"ok": true, "task": "delete_me", "result": {"deleted": true}}"#))
+        }
+
+        await expectError(.server(status: 500)) {
+            _ = try await client.deleteCloudData()
+        }
+        XCTAssertEqual(store.stored, expired, "Still there, so deleting can be tried again")
+        XCTAssertTrue(client.hasSession)
+        XCTAssertEqual(AIStubURLProtocol.count(path: F.signUpPath), 0)
+        XCTAssertEqual(AIStubURLProtocol.count(path: F.functionPath), 0)
+    }
+
+    func testDeleteAfterARejectedTokenAndARefreshRateLimitKeepsTheSession() async {
+        let store = AIMemorySessionStore(validSession())
+        let client = makeClient(store: store)
+        AIStubURLProtocol.handler = { request, _ in
+            if request.url?.path == F.tokenPath {
+                return (429, [:], F.json(#"{"code": 429, "msg": "Too many requests"}"#))
+            }
+            return (401, [:], F.unauthorizedReply)
+        }
+
+        await expectError(.quotaExceeded(retryAfter: nil)) {
+            _ = try await client.deleteCloudData()
+        }
+        XCTAssertEqual(store.stored, validSession())
+        XCTAssertEqual(AIStubURLProtocol.count(path: F.signUpPath), 0)
     }
 }

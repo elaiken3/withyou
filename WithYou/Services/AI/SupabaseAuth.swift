@@ -89,7 +89,8 @@ protocol CloudAISessionStore: AnyObject {
     func clear()
 }
 
-/// Keeps the session in the Keychain (this device only, available after first unlock).
+/// Keeps the session in the Keychain, available after first unlock. It moves to a new iPhone
+/// with an encrypted backup or Quick Start, so that iPhone can still delete the account.
 final class KeychainCloudAISessionStore: CloudAISessionStore {
     static let account = "cloud_ai.supabase_session"
 
@@ -162,10 +163,10 @@ final class SupabaseAuth {
             }
             do {
                 return try await refresh().accessToken
-            } catch CloudAIError.network {
-                throw CloudAIError.network
-            } catch {
+            } catch CloudAIError.unauthorized {
                 // The refresh token was rejected; fall through to a new sign-in.
+                // Anything else (offline, a server error, a rate limit) is thrown as is, so a
+                // short outage never replaces the account or reads as "nothing to delete".
             }
         }
         guard signInIfNeeded else { throw CloudAIError.unauthorized }

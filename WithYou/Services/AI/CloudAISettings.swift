@@ -97,7 +97,7 @@ struct CloudAISettingsSection: View {
 
     private var footerText: String {
         if CloudAISettings.isConfigured {
-            return "When Apple Intelligence isn’t available or can’t help, WithYou can send the text of each AI request to Claude (by Anthropic) through WithYou’s server, with a random ID instead of your name. Your words aren’t stored. Off by default."
+            return "When Apple Intelligence isn’t available or can’t help, WithYou can send the text of each AI request to Claude (by Anthropic) through WithYou’s server, with a random ID instead of your name. WithYou’s server doesn’t keep your words. Off by default."
         }
         return "WithYou uses Apple Intelligence when this iPhone has it, and simple built-in suggestions otherwise."
     }

@@ -125,6 +125,17 @@ final class AIServiceTests: XCTestCase {
         XCTAssertEqual(merged?.map(\.originalText), [text])
     }
 
+    func testCaptureSuggestionsKeepALineWhoseTitleCameBackEmpty() {
+        let text = "- Email landlord\n- Buy milk\n- Water the plants"
+        let suggestions = AIOutput.captureSuggestions(
+            from: [draft("Email landlord"), draft("**"), draft("Water the plants")],
+            text: text,
+            context: context(now: TestDates.today(at: 10))
+        )
+        XCTAssertEqual(suggestions?.map(\.title), ["Email landlord", "Buy milk", "Water the plants"])
+        XCTAssertEqual(suggestions?.map(\.originalText), ["Email landlord", "Buy milk", "Water the plants"])
+    }
+
     func testCaptureSuggestionsAreCappedAtTwelve() {
         let drafts = (1...20).map { draft("Thing \($0)") }
         let suggestions = AIOutput.captureSuggestions(from: drafts, text: "lots", context: context(now: TestDates.today(at: 10)))

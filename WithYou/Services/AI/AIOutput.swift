@@ -145,7 +145,12 @@ enum AIOutput {
 
         var suggestions: [CaptureSuggestion] = []
         for (index, draft) in drafts.enumerated() {
-            let title = cleanText(draft.title, maxLength: maxTitleLength)
+            var title = cleanText(draft.title, maxLength: maxTitleLength)
+            // When items line up with lines, this item is the only one that carries its line,
+            // so an empty title falls back to the line itself rather than dropping it.
+            if title.isEmpty, matchesLines {
+                title = cleanText(lines[index], maxLength: maxTitleLength)
+            }
             guard !title.isEmpty else { continue }
 
             var step = cleanText(draft.firstStep, maxLength: maxStepLength)

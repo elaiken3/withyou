@@ -12,10 +12,10 @@ Reminders, focus endings and the optional daily check-in are local notifications
 ## Voice capture
 When you use the mic, Apple's speech recognition turns what you say into text. WithYou asks for on-device recognition whenever your iPhone supports it for your language, so your voice stays on your device. Where it doesn't, Apple may process the audio to recognize it, as with keyboard dictation, under Apple's privacy policy. WithYou never receives or stores audio. The microphone is only on while you're capturing.
 
-Capturing with Siri works through Siri, under Apple's privacy policy.
+Capturing with Siri works through Siri, under Apple's privacy policy. WithYou then sorts the words like any other capture (on your device, or with cloud AI if you turned it on).
 
 ## AI help
-WithYou's AI features (sorting out a capture, breaking a task down, help when you're stuck, picking one thing to do, tidying brain-dump thoughts) only suggest. Nothing changes until you choose it. They work in one of three ways:
+WithYou's AI features (sorting out a capture, breaking a task down, help when you're stuck, picking one thing to do, tidying brain-dump thoughts) only suggest. Nothing changes until you choose it. The one exception is "Capture in WithYou" with Siri, which saves what you asked it to save, sorted the same way, and tells you what it saved. They work in one of three ways:
 
 - **On your device.** On devices that support Apple Intelligence (iOS 26 or later), WithYou uses Apple's on-device language model. This happens entirely on your device.
 - **Built-in rules.** Without Apple Intelligence, simple rules on your device give the suggestion.
@@ -24,7 +24,7 @@ WithYou's AI features (sorting out a capture, breaking a task down, help when yo
 ### What a cloud AI request contains
 - the text of that one request: for example, the thought you asked to sort out, the task you asked to break down, the titles of the Inbox items and today's reminders when you ask for help picking, or the brain-dump thoughts being tidied
 - the small details that request needs, such as your current time and time zone, your morning and evening hours, the energy level you chose and time estimates
-- a random anonymous ID created on your device, so daily limits can be applied. It isn't linked to your name, email, phone number or Apple ID.
+- a random anonymous ID that WithYou's server assigns the first time you use cloud AI, so daily limits can be applied. It isn't linked to your name, email, phone number or Apple ID.
 
 ### What is kept
 WithYou's server doesn't store your words or the AI's replies. It keeps only a count of requests per anonymous ID per day, to apply fair daily limits, and deletes those counts after 35 days. Like any internet connection, the server receives your IP address as part of the request.

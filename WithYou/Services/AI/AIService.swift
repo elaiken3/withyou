@@ -54,6 +54,13 @@ enum AIService {
         return client.isConfigured && !client.isPaused ? client : nil
     }
 
+    /// Checked again just before a cloud attempt sends anything. It can start up to
+    /// `onDeviceTimeout` after it was queued, and by then the person may have turned cloud AI
+    /// off or deleted their cloud data.
+    private static func stillCloudEnabled() -> Bool {
+        isCloudEnabled
+    }
+
     // MARK: - Capture
 
     /// Turns typed or spoken text into one or more items to review. Empty text gives no items.
@@ -80,6 +87,7 @@ enum AIService {
         #endif
         if let cloud = cloudClient {
             attempts.append(AIAttempt(source: .cloud, timeout: cloudTimeout) {
+                guard await stillCloudEnabled() else { return nil }
                 let drafts = try await cloud.capture(trimmed, context: context)
                 return await AIOutput.captureSuggestions(from: drafts, text: trimmed, context: context)
             })
@@ -109,6 +117,7 @@ enum AIService {
         #endif
         if let cloud = cloudClient {
             attempts.append(AIAttempt(source: .cloud, timeout: cloudTimeout) {
+                guard await stillCloudEnabled() else { return nil }
                 let steps = try await cloud.breakDown(title: cleanTitle, currentStep: currentStep)
                 return await AIOutput.breakDownSteps(from: steps, currentStep: currentStep)
             })
@@ -138,6 +147,7 @@ enum AIService {
         #endif
         if let cloud = cloudClient {
             attempts.append(AIAttempt(source: .cloud, timeout: cloudTimeout) {
+                guard await stillCloudEnabled() else { return nil }
                 let raw = try await cloud.stuckHelp(title: cleanTitle, blocker: blocker, energy: energy)
                 return await AIOutput.stuckSuggestion(raw)
             })
@@ -174,6 +184,7 @@ enum AIService {
         #endif
         if let cloud = cloudClient {
             attempts.append(AIAttempt(source: .cloud, timeout: cloudTimeout) {
+                guard await stillCloudEnabled() else { return nil }
                 let raw = try await cloud.suggestNext(
                     from: usable, energy: energy, minutesAvailable: minutesAvailable, now: now
                 )
@@ -210,6 +221,7 @@ enum AIService {
         #endif
         if let cloud = cloudClient {
             attempts.append(AIAttempt(source: .cloud, timeout: cloudTimeout) {
+                guard await stillCloudEnabled() else { return nil }
                 let raw = try await cloud.tidy(sendable)
                 return await merged(raw, into: fallback, at: indices, subsetFallback: subsetFallback)
             })
