@@ -112,7 +112,7 @@ private struct WelcomePage: Identifiable {
             id: 2,
             symbol: "timer",
             title: "Protect a little focus",
-            message: "Start a focus session for as long as feels right. Short ones count. If things get noisy, Refocus takes 30 seconds, and “I’m stuck” finds a smaller first step.",
+            message: "Start a focus session for as long as feels right. Short ones count. If things get noisy, Refocus takes about a minute, and “I’m stuck” finds a smaller first step.",
             note: "Notifications are optional. WithYou only asks when you schedule something."
         )
     ]

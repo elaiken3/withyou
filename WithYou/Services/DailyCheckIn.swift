@@ -28,6 +28,9 @@ enum DailyCheckIn {
     /// How many check-ins are scheduled ahead.
     nonisolated static let scheduledCount = 7
     nonisolated static let identifierPrefix = "checkin-"
+    /// iOS keeps only this many pending local notifications per app (the soonest ones) and
+    /// quietly drops the rest.
+    nonisolated static let systemPendingLimit = 64
 
     private static let log = Logger(subsystem: "com.commongenelabs.WithYou", category: "checkin")
     private static var refreshTask: Task<Void, Never>?
@@ -90,6 +93,7 @@ enum DailyCheckIn {
 
         let pending = await center.pendingNotificationRequests()
         let stale = pending.map { $0.identifier }.filter { $0.hasPrefix(identifierPrefix) }
+        let otherPendingCount = pending.count - stale.count
         if !stale.isEmpty {
             center.removePendingNotificationRequests(withIdentifiers: stale)
         }
@@ -118,7 +122,7 @@ enum DailyCheckIn {
             after: now,
             minutes: chosenMinutes,
             restChosenAt: restChosenAt,
-            count: scheduledCount,
+            count: checkInBudget(otherPendingCount: otherPendingCount),
             calendar: calendar
         )
 
@@ -151,6 +155,15 @@ enum DailyCheckIn {
     }
 
     // MARK: - Pure helpers
+
+    /// How many check-ins fit next to the notifications already pending. Check-ins are almost
+    /// always sooner than far-off reminders, so without a limit they could push a reminder past
+    /// iOS's pending limit, and reminders aren't scheduled again later. One slot stays free for
+    /// a focus session's end.
+    nonisolated static func checkInBudget(otherPendingCount: Int, wanted: Int = scheduledCount) -> Int {
+        let free = systemPendingLimit - 1 - max(otherPendingCount, 0)
+        return min(max(wanted, 0), max(free, 0))
+    }
 
     /// Keeps a stored time inside one day (0 ... 23:59).
     nonisolated static func clampedMinutes(_ minutes: Int) -> Int {

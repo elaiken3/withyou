@@ -57,7 +57,7 @@ struct StartFocusIntent: AppIntent {
 
 struct RefocusIntent: AppIntent {
     static var title: LocalizedStringResource = "Refocus"
-    static var description = IntentDescription("Open a 30-second breathing reset.")
+    static var description = IntentDescription("Open a one-minute breathing reset.")
 
     static var openAppWhenRun: Bool = true
 

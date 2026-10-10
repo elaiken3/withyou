@@ -29,8 +29,8 @@ struct RefocusView: View {
     @State private var phrase: String = BreathWords.word(for: .inhale, occurrence: 0)
     @State private var hasStarted = false
     @State private var isFinished = false
-    /// The last phase whose words, haptic and announcement have already run.
-    @State private var handledPhaseIndex = -1
+    /// Makes sure each phase's words, haptic and announcement run once.
+    @State private var phaseTracker = BreathPhaseTracker()
     /// Bumped by "Again" so the words don't repeat the previous run.
     @State private var runCount = 0
     /// True while Refocus is what keeps the screen on (Focus may already be doing it).
@@ -132,9 +132,10 @@ struct RefocusView: View {
 
             breathCard(secondsLeft: secondsLeft)
         }
-        // Words, haptics and VoiceOver follow phase changes, not frames.
+        // Words, haptics and VoiceOver follow phase changes, not frames. Never read the
+        // clock earlier than this frame, or the new phase (or the finish) could be missed.
         .onChange(of: state.phaseIndex) {
-            handlePhase(engine.state(at: Date()))
+            handlePhase(engine.state(at: max(date, Date())))
         }
     }
 
@@ -262,7 +263,7 @@ struct RefocusView: View {
         // A minute of stillness shouldn't let the screen lock mid-breath.
         keepScreenOn(true)
         hasStarted = true
-        handledPhaseIndex = -1
+        phaseTracker.reset()
         withAnimation(.easeInOut(duration: 0.4)) {
             isFinished = false
         }
@@ -271,29 +272,25 @@ struct RefocusView: View {
 
     /// Runs once per phase: new words, that phase's haptic and a VoiceOver announcement.
     private func handlePhase(_ state: BreathState) {
-        // A stale frame can briefly report an earlier phase; only ever move forward.
-        guard state.phaseIndex > handledPhaseIndex else { return }
-        handledPhaseIndex = state.phaseIndex
+        // Nil for a phase that already ran (or a stale, earlier one).
+        guard let event = phaseTracker.advance(to: state, runCount: runCount) else { return }
 
         if let current = handoff, current.isComplete(at: Date()) {
             handoff = nil
         }
 
-        if state.isFinished {
+        switch event {
+        case .finished:
             finish()
-            return
+        case .phase(let word, let curve):
+            withAnimation(.easeInOut(duration: 0.6)) {
+                phrase = word
+            }
+            if hapticBreathing, !engine.isPaused {
+                haptics.play(curve)
+            }
+            AccessibilityNotification.Announcement(word).post()
         }
-
-        // Rotating by occurrence (and by run, for "Again") never repeats the previous phrase.
-        let next = BreathWords.word(for: state.phase.kind, occurrence: state.occurrence + runCount)
-        withAnimation(.easeInOut(duration: 0.6)) {
-            phrase = next
-        }
-
-        if hapticBreathing, !engine.isPaused {
-            haptics.play(BreathHapticCurve(state: state))
-        }
-        AccessibilityNotification.Announcement(next).post()
     }
 
     private func finish() {

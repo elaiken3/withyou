@@ -71,6 +71,11 @@ struct ScheduleView: View {
                     now = Date()
                 }
             }
+            // Another screen needs its sheet up (see `AppRouter.closeAllSheets()`).
+            .onChange(of: AppRouter.shared.closeSheetsRequest) { _, _ in
+                editingReminder = nil
+                reschedulingReminder = nil
+            }
         }
     }
 

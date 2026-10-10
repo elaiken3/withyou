@@ -19,11 +19,17 @@ enum StuckCoachText {
 
 /// One chip per blocker. Tapping one asks for a suggestion.
 struct StuckBlockerChips: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var onSelect: (StuckBlocker) -> Void
 
-    /// As many chips per row as fit; one per row at large text sizes.
+    /// As many chips per row as fit; one per row at accessibility text sizes, so labels
+    /// never break mid-word.
     private var columns: [GridItem] {
-        [GridItem(.adaptive(minimum: 150), spacing: 8, alignment: .leading)]
+        if dynamicTypeSize.isAccessibilitySize {
+            return [GridItem(.flexible(), spacing: 8, alignment: .leading)]
+        }
+        return [GridItem(.adaptive(minimum: 150), spacing: 8, alignment: .leading)]
     }
 
     var body: some View {

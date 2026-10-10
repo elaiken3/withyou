@@ -53,6 +53,11 @@ struct InboxView: View {
                 .presentationBackground(Color.appBackground)
             }
             .toast($toast)
+            // Another screen needs its sheet up (see `AppRouter.closeAllSheets()`).
+            .onChange(of: AppRouter.shared.closeSheetsRequest) { _, _ in
+                showQuickAdd = false
+                itemToSchedule = nil
+            }
         }
     }
 

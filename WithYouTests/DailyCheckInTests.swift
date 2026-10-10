@@ -160,6 +160,20 @@ final class DailyCheckInTests: XCTestCase {
         XCTAssertTrue(DailyCheckIn.upcomingFireDates(after: now, minutes: 540, restChosenAt: nil, count: 0, calendar: calendar).isEmpty)
     }
 
+    // MARK: - iOS's pending limit
+
+    func testCheckInsLeaveRoomForReminders() {
+        XCTAssertEqual(DailyCheckIn.systemPendingLimit, 64)
+        XCTAssertEqual(DailyCheckIn.checkInBudget(otherPendingCount: 0), DailyCheckIn.scheduledCount)
+        XCTAssertEqual(DailyCheckIn.checkInBudget(otherPendingCount: 56), 7, "56 others + 7 check-ins + 1 spare = 64")
+        XCTAssertEqual(DailyCheckIn.checkInBudget(otherPendingCount: 57), 6)
+        XCTAssertEqual(DailyCheckIn.checkInBudget(otherPendingCount: 62), 1)
+        XCTAssertEqual(DailyCheckIn.checkInBudget(otherPendingCount: 63), 0, "One slot stays free for a focus end")
+        XCTAssertEqual(DailyCheckIn.checkInBudget(otherPendingCount: 200), 0)
+        XCTAssertEqual(DailyCheckIn.checkInBudget(otherPendingCount: -3), DailyCheckIn.scheduledCount)
+        XCTAssertEqual(DailyCheckIn.checkInBudget(otherPendingCount: 10, wanted: 3), 3)
+    }
+
     // MARK: - Daylight saving
 
     func testSpringForwardKeepsTheWallClockTime() {

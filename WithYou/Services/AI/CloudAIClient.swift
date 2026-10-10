@@ -253,6 +253,10 @@ final class CloudAIClient {
     /// After "out of requests for today" or "unavailable", cloud AI is skipped until then.
     private(set) var pausedUntil: Date?
 
+    /// Bumped by `deleteCloudData()`. A request that started before a delete never signs in
+    /// again afterwards, so no new account appears right after the person deleted theirs.
+    private var accountGeneration = 0
+
     init(
         config: CloudAIConfig?,
         urlSession: URLSession = .shared,
@@ -332,10 +336,12 @@ final class CloudAIClient {
                 allowNewAccount: false,
                 ignorePause: true
             )
+            accountGeneration += 1
             auth.signOutLocally()
             return result.deleted
         } catch CloudAIError.unauthorized {
             // The server no longer knows this account, so nothing of it is left there.
+            accountGeneration += 1
             auth.signOutLocally()
             return false
         }
@@ -344,7 +350,8 @@ final class CloudAIClient {
     // MARK: - Calls
 
     /// Sends one task. On a 401 it refreshes the token once, then (when `allowNewAccount`)
-    /// signs in again once.
+    /// signs in again once. Only a rejected refresh token leads to a new sign-in; being offline,
+    /// a server error or a rate limit is thrown as is.
     func perform<Input: Encodable, Output: Decodable>(
         task: String,
         input: Input,
@@ -356,25 +363,38 @@ final class CloudAIClient {
         if !ignorePause && isPaused { throw CloudAIError.paused }
 
         let body = try Self.encodeBody(task: task, input: input)
-        let token = try await auth.accessToken(signInIfNeeded: allowNewAccount)
-        var reply = try await send(body, token: token, config: config)
-
-        if reply.status == 401 {
-            let refreshed = try? await auth.refresh()
-            if let refreshed {
-                reply = try await send(body, token: refreshed.accessToken, config: config)
-            }
-        }
-        if reply.status == 401, allowNewAccount {
-            let session = try await auth.signIn()
-            reply = try await send(body, token: session.accessToken, config: config)
-        }
-        Self.log.info("Cloud AI \(task, privacy: .public): HTTP \(reply.status, privacy: .public)")
+        let generation = accountGeneration
 
         do {
+            let token = try await auth.accessToken(signInIfNeeded: allowNewAccount)
+            // The person deleted their cloud data while this was waiting: send nothing.
+            guard accountGeneration == generation else { throw CloudAIError.unauthorized }
+            var reply = try await send(body, token: token, config: config)
+
+            if reply.status == 401 {
+                var refreshed: SupabaseSession?
+                do {
+                    refreshed = try await auth.refresh()
+                } catch CloudAIError.unauthorized {
+                    // The refresh token was rejected too.
+                    refreshed = nil
+                }
+                if let refreshed {
+                    reply = try await send(body, token: refreshed.accessToken, config: config)
+                }
+            }
+            if reply.status == 401, allowNewAccount {
+                guard accountGeneration == generation else { throw CloudAIError.unauthorized }
+                let session = try await auth.signIn()
+                reply = try await send(body, token: session.accessToken, config: config)
+            }
+            Self.log.info("Cloud AI \(task, privacy: .public): HTTP \(reply.status, privacy: .public)")
+
             return try Self.decodeResult(status: reply.status, data: reply.data, retryAfter: reply.retryAfter, as: type)
         } catch let error as CloudAIError {
-            notePause(after: error)
+            // With `allowNewAccount`, `.unauthorized` means even a brand-new account was turned
+            // away, so trying again on every request would only create more of them.
+            notePause(after: error, signInRejected: allowNewAccount && accountGeneration == generation)
             throw error
         }
     }
@@ -399,12 +419,16 @@ final class CloudAIClient {
         return Reply(status: http.statusCode, data: result.0, retryAfter: Self.retryAfter(from: http))
     }
 
-    private func notePause(after error: CloudAIError) {
+    /// `signInRejected`: an `.unauthorized` came after a new sign-in was tried (or refused).
+    /// A plain `.unauthorized` while deleting never pauses.
+    private func notePause(after error: CloudAIError, signInRejected: Bool) {
         switch error {
         case .quotaExceeded(let retryAfter):
             let seconds = min(max(retryAfter ?? 3600, 60), 24 * 3600)
             pausedUntil = now().addingTimeInterval(seconds)
         case .serviceUnavailable:
+            pausedUntil = now().addingTimeInterval(Self.unavailablePause)
+        case .unauthorized where signInRejected:
             pausedUntil = now().addingTimeInterval(Self.unavailablePause)
         default:
             break

@@ -17,7 +17,8 @@ import SwiftData
 ///
 /// "Save" is instant and rule-based. "Sort it out for me" asks AI to split and time the
 /// text, and "Speak" opens voice capture; both end in a review, so nothing is saved
-/// without the person seeing it first.
+/// without the person seeing it first. During a focus session (with "Send captures to Brain
+/// Dump during focus" on), Save and voice capture park the words in its brain dump instead.
 struct QuickAddView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
@@ -39,6 +40,8 @@ struct QuickAddView: View {
 
     @State private var showVoiceCapture = false
     @State private var isSorting = false
+    /// The running "Sort it out", so "Not now" (or saving right away) can stop it.
+    @State private var sortTask: Task<Void, Never>?
     @State private var reviewRequest: CaptureReviewRequest?
     /// What a review or voice capture saved; finished off once its sheet has closed.
     @State private var pendingBatch: PendingBatch?
@@ -90,7 +93,8 @@ struct QuickAddView: View {
                         saveButtons
                             .padding(.top, 4)
 
-                        if !isTextEmpty {
+                        // While focusing, Save parks the words as they are; nothing to sort.
+                        if !isTextEmpty && destination != .focusDump {
                             sortButton
                         }
                     }
@@ -126,9 +130,19 @@ struct QuickAddView: View {
             .tint(.appAccent)
             .toast($toast)
             .sheet(isPresented: $showVoiceCapture, onDismiss: finishPendingBatch) {
-                VoiceCaptureView(initialText: text) { summary in
-                    pendingBatch = PendingBatch(summary: summary, text: text, step: startStepText)
-                }
+                // Voice capture starts from the typed words, so the words it hands back
+                // (typed and spoken) replace them.
+                VoiceCaptureView(
+                    initialText: text,
+                    onSaved: { summary, words in
+                        pendingBatch = PendingBatch(summary: summary, text: words, step: startStepText)
+                    },
+                    onClose: { words in
+                        if !words.isEmpty {
+                            text = words
+                        }
+                    }
+                )
             }
             .sheet(item: $reviewRequest, onDismiss: finishPendingBatch) { request in
                 NavigationStack {
@@ -144,10 +158,19 @@ struct QuickAddView: View {
                 }
             }
             .onAppear {
+                // A focus session may have started or ended on another tab.
+                destination = previewDestination(for: text)
                 Task {
                     try? await Task.sleep(for: .milliseconds(50))
                     isTextFocused = true
                 }
+            }
+            // Another screen needs its sheet up (see `AppRouter.closeAllSheets()`). Voice
+            // capture hands its words back as it closes.
+            .onChange(of: AppRouter.shared.closeSheetsRequest) { _, _ in
+                cancelSort()
+                reviewRequest = nil
+                showVoiceCapture = false
             }
             // Debounced preview: restarts on every keystroke, settles after ~0.3 s.
             .task(id: text) {
@@ -215,6 +238,7 @@ struct QuickAddView: View {
     private var voiceButton: some View {
         Button {
             Haptics.tap()
+            cancelSort()
             isTextFocused = false
             isFirstStepFocused = false
             showVoiceCapture = true
@@ -224,31 +248,49 @@ struct QuickAddView: View {
                 .padding(.vertical, 4)
         }
         .buttonStyle(.bordered)
-        .disabled(isSaving || isSorting)
+        .disabled(isSaving)
         .accessibilityLabel("Voice capture")
-        .accessibilityHint("Say what’s on your mind. You’ll look it over before anything is saved.")
+        .accessibilityHint(destination == .focusDump
+            ? "Say what’s on your mind. It’s parked in your focus session."
+            : "Say what’s on your mind. You’ll look it over before anything is saved.")
     }
 
     /// AI (or the rules) splits and times the text; a review opens before anything is saved.
+    /// It can take a little while, so "Not now" stops it (and Save still works meanwhile).
     private var sortButton: some View {
-        Button {
-            Haptics.tap()
-            sortItOut()
-        } label: {
-            HStack(spacing: 6) {
-                if isSorting {
-                    ProgressView()
-                } else {
-                    Image(systemName: "wand.and.stars")
-                        .accessibilityHidden(true)
+        VStack(spacing: 0) {
+            Button {
+                Haptics.tap()
+                sortItOut()
+            } label: {
+                HStack(spacing: 6) {
+                    if isSorting {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "wand.and.stars")
+                            .accessibilityHidden(true)
+                    }
+                    Text(isSorting ? "Sorting it out…" : "Sort it out for me")
                 }
-                Text(isSorting ? "Sorting it out…" : "Sort it out for me")
+                .frame(maxWidth: .infinity, minHeight: 44)
             }
-            .frame(maxWidth: .infinity, minHeight: 44)
+            .buttonStyle(.borderless)
+            .disabled(isSaving || isSorting)
+            .accessibilityHint("Splits it into separate things and suggests times. You look it over before anything is saved.")
+
+            if isSorting {
+                Button {
+                    Haptics.tap()
+                    cancelSort()
+                } label: {
+                    Text("Not now")
+                        .foregroundStyle(.appSecondaryText)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityHint("Stops sorting. Your words stay here.")
+            }
         }
-        .buttonStyle(.borderless)
-        .disabled(isSaving || isSorting)
-        .accessibilityHint("Splits it into separate things and suggests times. You look it over before anything is saved.")
     }
 
     private func destinationChip(_ destination: Destination) -> some View {
@@ -360,8 +402,9 @@ struct QuickAddView: View {
         text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    /// Save stays available while sorting: it stops the sort and saves right away.
     private var isSaveDisabled: Bool {
-        isSaving || isSorting || isTextEmpty
+        isSaving || isTextEmpty
     }
 
     private enum SaveMode {
@@ -391,6 +434,8 @@ struct QuickAddView: View {
         guard !isSaving else { return }
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
+        // Saving now means the sort isn't needed any more.
+        cancelSort()
 
         isSaving = true
         lastErrorMessage = nil
@@ -500,6 +545,13 @@ struct QuickAddView: View {
         guard !trimmedText.isEmpty else { return }
         let trimmedStep = startStepText.trimmingCharacters(in: .whitespacesAndNewlines)
 
+        // A focus session started since the destination was last shown: Save parks the words,
+        // as the setting asks, rather than sorting them into the Inbox.
+        if previewDestination(for: trimmedText) == .focusDump {
+            save(mode: .smart)
+            return
+        }
+
         isSorting = true
         lastErrorMessage = nil
         isTextFocused = false
@@ -508,8 +560,10 @@ struct QuickAddView: View {
         ProfileStore.ensureDefaultProfile(in: context)
         let profile = ProfileStore.activeProfile(in: context)
 
-        Task {
+        sortTask = Task {
             let result = await AIService.capture(trimmedText, context: CaptureContext.current(profile: profile))
+            // "Not now", or saved right away, while waiting.
+            guard !Task.isCancelled else { return }
             var suggestions = result.value
             var source = result.source
             if suggestions.isEmpty {
@@ -521,8 +575,17 @@ struct QuickAddView: View {
                 suggestions[0].firstStep = trimmedStep
             }
             isSorting = false
+            sortTask = nil
             reviewRequest = CaptureReviewRequest(suggestions: suggestions, source: source)
         }
+    }
+
+    /// Stops a running "Sort it out". The words stay in the editor.
+    private func cancelSort() {
+        guard isSorting else { return }
+        sortTask?.cancel()
+        sortTask = nil
+        isSorting = false
     }
 
     /// Ends a review or voice capture save the same way as a plain save.
